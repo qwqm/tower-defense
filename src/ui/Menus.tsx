@@ -2,7 +2,8 @@ import { useState } from 'react';
 import {
   CHAPTERS, LEVELS, TROOPS, TROOP_KEYS, HEROES, HERO_KEYS, ENEMIES, ENEMY_KEYS,
   BOSSES, BOSS_KEYS, UPGRADES, ACHIEVEMENTS, FRIENDLY_DAMAGE_SCALE,
-  FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, rankOf, nextRank,
+  FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, ENEMY_HP_SCALE,
+  MAX_UNIT_LEVEL, rankOf, nextRank,
 } from '../game/data';
 import type { SaveData } from '../game/save';
 import { totalStars, isLevelUnlocked } from '../game/save';
@@ -185,11 +186,11 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
           return (
             <Card key={k}>
               <div className="flex gap-3">
-                <Piece char={ok ? d.char : '?'} color={ok ? d.color : '#9a8f7c'} lv={ok ? 3 : 0} />
+                <Piece char={ok ? d.char : '?'} color={ok ? d.color : '#9a8f7c'} lv={ok ? MAX_UNIT_LEVEL : 0} />
                 <div className="min-w-0">
                   <div className="ink-title text-lg text-[#2c251d]">{ok ? d.name : '未解锁'} <span className="text-xs text-[#7a6a55]">{ok ? d.role : ''}</span></div>
                   <div className="text-xs text-[#6b5b45]">{ok ? d.desc : '在战斗中征募以解锁。'}</div>
-                  {ok && <div className="mt-1 text-[11px] text-[#7a6a55]">攻击 {Number((d.dmg * FRIENDLY_DAMAGE_SCALE).toFixed(2))} · 间隔 {Number((d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE).toFixed(2))}s · 射程 {d.range} · 三阶伤害倍率 6.2x</div>}
+                  {ok && <div className="mt-1 text-[11px] text-[#7a6a55]">攻击 {Number((d.dmg * FRIENDLY_DAMAGE_SCALE).toFixed(2))} · 间隔 {Number((d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE).toFixed(2))}s · 射程 {d.range} · 五阶伤害倍率 24.8x{k === 'qi' ? ' · 五阶攻速 2x' : ''}</div>}
                 </div>
               </div>
             </Card>
@@ -200,9 +201,9 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
           return (
             <Card key={k}>
               <div className="flex gap-3">
-                <Piece char={ok ? d.char : '?'} color={ok ? d.color : '#9a8f7c'} hero lv={ok ? 3 : 0} size={50} />
+                <Piece char={ok ? d.char : '?'} color={ok ? d.color : '#9a8f7c'} hero lv={ok ? MAX_UNIT_LEVEL : 0} size={50} />
                 <div className="min-w-0 flex-1">
-                  <div className="ink-title text-lg text-[#2c251d]">{ok ? d.name : '未解锁武将'} <span className="text-xs text-[#a8761f]">最高3★</span></div>
+                  <div className="ink-title text-lg text-[#2c251d]">{ok ? d.name : '未解锁武将'} <span className="text-xs text-[#a8761f]">最高5★</span></div>
                   {ok ? (
                     <>
                       <div className="text-xs text-[#7a6a55]">定位：{d.role}</div>
@@ -229,7 +230,7 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
                 <div>
                   <div className="ink-title text-lg text-[#2c251d]">{ok ? d.name : '未遭遇'}</div>
                   <div className="text-xs text-[#6b5b45]">{ok ? d.desc : '在战场上遭遇后解锁。'}</div>
-                  {ok && <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {d.hp} · 速度 {d.speed} · 突破损失 {d.lives} 生命 · 军粮 {Number((d.gold * ENEMY_GOLD_DROP_SCALE).toFixed(1))}</div>}
+                  {ok && <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {Math.round(d.hp * ENEMY_HP_SCALE)} · 速度 {d.speed} · 突破损失 {d.lives} 生命 · 军粮 {Number((d.gold * ENEMY_GOLD_DROP_SCALE).toFixed(1))}</div>}
                 </div>
               </div>
             </Card>
@@ -244,7 +245,7 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
                 <div>
                   <div className="ink-title text-lg text-[#8a2b1f]">{ok ? d.name : '未知强敌'}</div>
                   {ok && <div className="text-xs text-[#3b3229]">【{d.mech}】{d.desc}</div>}
-                  {ok ? <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {d.hp} · 突破损失 {d.lives} 生命 · 军粮 {Number((d.gold * ENEMY_GOLD_DROP_SCALE).toFixed(1))}</div>
+                  {ok ? <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {Math.round(d.hp * ENEMY_HP_SCALE)} · 突破损失 {d.lives} 生命 · 军粮 {Number((d.gold * ENEMY_GOLD_DROP_SCALE).toFixed(1))}</div>
                     : <div className="text-xs text-[#6b5b45]">击败或遭遇后解锁。</div>}
                 </div>
               </div>

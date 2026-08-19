@@ -28,6 +28,7 @@ const TUT: { text: string; wait: string }[] = [
   { text: '将魂池里同样可以拖动合成，先配好再上阵', wait: 'tap' },
   { text: '相配的两枚将魂并排放置（赵+云），武将自动觉醒并占两格！', wait: 'tap' },
 ];
+const WAVE_COUNTDOWN_DURATION = 5;
 
 interface PoolTile { key: string; kind: string; lv: number; char: string; part: number; color: string; skill?: string; skillPct?: number }
 interface Info { name: string; sub: string; lv: number; hero: boolean; dmg: number; aspd: number; range: number; skill?: string; skillPct?: number }
@@ -158,6 +159,9 @@ export function Battle(p: Props) {
     { key: '', kind: '', lv: 0, char: '', part: -1, color: '' },
     { key: '', kind: '', lv: 0, char: '', part: -1, color: '' },
   ];
+  const waveCountdown = snap?.inWaveBreak && snap.nextWaveIn <= WAVE_COUNTDOWN_DURATION
+    ? Math.max(1, Math.ceil(snap.nextWaveIn))
+    : null;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-[#f2ebdc] select-none">
@@ -167,7 +171,7 @@ export function Battle(p: Props) {
           className="rounded-lg bg-[#3b3229]/10 px-2.5 py-1.5 text-sm text-[#3b3229]">‖</button>
         <div>
           <div className="ink-title text-base leading-none text-[#2c251d]">{lv.chapter + 1}-{lv.index + 1} {lv.name}</div>
-          <div className="text-[11px] text-[#7a6a55]">波次 {Math.min(snap?.wave || 1, lv.waves)}/{lv.waves}{snap?.inWaveBreak ? ` · 下一波 ${snap.nextWaveIn.toFixed(0)}s` : ''}</div>
+          <div className="text-[11px] text-[#7a6a55]">波次 {Math.min(snap?.wave || 1, lv.waves)}/{lv.waves}{snap?.inWaveBreak ? waveCountdown !== null ? ` · 下一波 ${waveCountdown}s` : ' · 整军中' : ''}</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => { sfx('click'); gameRef.current?.setSpeed(snap?.speed === 1 ? 2 : 1); }}
@@ -202,6 +206,13 @@ export function Battle(p: Props) {
       {/* 战场 */}
       <div className="relative min-h-0 flex-1">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
+
+        {waveCountdown !== null && (
+          <div className="pointer-events-none absolute left-1/2 top-1/3 z-20 -translate-x-1/2 -translate-y-1/2 text-center">
+            <div className="text-sm tracking-[0.35em] text-[#7a5a34]">下一波</div>
+            <div className="ink-title text-7xl leading-none text-[#8a2b1f] drop-shadow-[0_2px_0_rgba(255,255,255,0.8)]">{waveCountdown}</div>
+          </div>
+        )}
 
         {/* 教学（上方） */}
         {tut >= 0 && tut < TUT.length && (

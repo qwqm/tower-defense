@@ -22,17 +22,17 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
   dao: {
     key: 'dao', char: '刀', name: '刀兵', role: '单体高伤',
     desc: '挥刀点斩，单体伤害极高，克制精锐重甲。',
-    dmg: 13, cd: 1.15, range: 3.4, attack: 'single', color: '#1f2937',
+    dmg: 13, cd: 0.575, range: 3.4, attack: 'single', color: '#1f2937',
   },
   qiang: {
-    key: 'qiang', char: '枪', name: '枪兵', role: '直线穿透',
-    desc: '刺出枪芒，贯穿一条直线上的多名敌人。',
-    dmg: 7.5, cd: 1.05, range: 4.8, attack: 'pierce', pierce: 3, color: '#134e4a',
+    key: 'qiang', char: '枪', name: '枪兵', role: '快速三目标范围',
+    desc: '快速刺出枪芒，对目标及附近最多三名敌军造成范围伤害。',
+    dmg: 6.5, cd: 0.575, range: 4.8, attack: 'aoe', splash: 1.5, color: '#134e4a',
   },
   qi: {
-    key: 'qi', char: '骑', name: '骑兵', role: '慢速范围爆发',
-    desc: '铁骑冲碾一片，攻速很慢但单次范围伤害极高。',
-    dmg: 27.5, cd: 2.4, range: 4.0, attack: 'aoe', splash: 1.5, color: '#7c2d12',
+    key: 'qi', char: '骑', name: '骑兵', role: '三目标冲锋控制',
+    desc: '冲击射程内最靠前的三名敌军并令其短暂停步；五阶时攻速翻倍。',
+    dmg: 27.5, cd: 2.4, range: 4.0, attack: 'burst', color: '#7c2d12',
   },
   gong: {
     key: 'gong', char: '弓', name: '弓兵', role: '远程持续',
@@ -42,10 +42,12 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
 };
 
 export const TROOP_KEYS: TroopKey[] = ['dao', 'qiang', 'qi', 'gong'];
-export const TIER_MUL = [1, 2.5, 6.2];
-export const FRIENDLY_DAMAGE_SCALE = 0.85;
+export const MAX_UNIT_LEVEL = 5;
+export const TIER_MUL = [1, 2.5, 6.2, 12.4, 24.8];
+export const FRIENDLY_DAMAGE_SCALE = 0.425;
 export const FRIENDLY_ATTACK_INTERVAL_SCALE = 3.5;
 export const ENEMY_GOLD_DROP_SCALE = 0.5;
+export const ENEMY_HP_SCALE = 1.1;
 
 export interface HeroDef {
   key: HeroKey;
@@ -109,7 +111,7 @@ export const HEROES: Record<HeroKey, HeroDef> = {
 };
 
 export const HERO_KEYS: HeroKey[] = ['zhaoyun', 'guanyu', 'zhangfei', 'liubei', 'huangzhong', 'machao'];
-export const STAR_MUL = [1, 2.35, 5.4];
+export const STAR_MUL = [1, 2.35, 5.4, 10.8, 21.6];
 
 /** 由两枚将魂字牌判定武将（赵云＝「赵」+「云」，相邻摆放觉醒） */
 export function heroForChars(c1: string, c2: string): HeroKey | null {
@@ -191,7 +193,7 @@ export const LEVELS: LevelDef[] = (() => {
         name: LEVEL_NAMES[c][i],
         waves: isBoss ? 12 : 8 + i,
         boss: isBoss ? ch.boss : null,
-        adouHp: 20 + c * 2,
+        adouHp: 6,
         hpMul: ch.hpMul * (1 + i * 0.17),
         spdMul: ch.spdMul,
         startGold: 20,
@@ -254,26 +256,26 @@ export function newMods(): Mods {
 }
 
 export const BOONS: Boon[] = [
-  { id: 'atk1', name: '全军奋勇', desc: '全军攻击力 +15%', tag: '通用', max: 5, apply: m => { m.atk *= 1.15; } },
-  { id: 'aspd1', name: '战鼓催征', desc: '全军攻击速度 +12%', tag: '通用', max: 5, apply: m => { m.aspd *= 1.12; } },
-  { id: 'dao1', name: '环首利刃', desc: '刀兵伤害 +40%', tag: '兵种', max: 4, apply: m => { m.troopAtk.dao *= 1.4; } },
-  { id: 'qiang1', name: '长枪列阵', desc: '枪兵穿透 +2，伤害 +25%', tag: '兵种', max: 4, apply: m => { m.pierceBonus += 2; m.troopAtk.qiang *= 1.25; } },
-  { id: 'qi1', name: '铁骑冲阵', desc: '骑兵伤害 +55%', tag: '兵种', max: 4, apply: m => { m.troopAtk.qi *= 1.55; } },
-  { id: 'gong1', name: '强弓劲弩', desc: '弓兵射程 +1.6，伤害 +25%', tag: '兵种', max: 4, apply: m => { m.range.gong += 1.6; m.troopAtk.gong *= 1.25; } },
-  { id: 'hero1', name: '五虎威名', desc: '武将伤害 +30%', tag: '武将', max: 5, apply: m => { m.heroAtk *= 1.3; } },
-  { id: 'hero2', name: '将令如山', desc: '武将攻击速度 +20%', tag: '武将', max: 4, apply: m => { m.heroAspd *= 1.2; } },
-  { id: 'cdr1', name: '兵贵神速', desc: '技能冷却 -18%', tag: '武将', max: 4, apply: m => { m.cdr += 0.18; } },
-  { id: 'cost1', name: '号令三军', desc: '征兵价格 -18%', tag: '经济', max: 4, apply: m => { m.recruitCostMul *= 0.82; } },
-  { id: 'gold1', name: '就地取粮', desc: '击杀获得军粮 +35%', tag: '经济', max: 4, apply: m => { m.goldKillMul *= 1.35; } },
-  { id: 'gold2', name: '屯田积粟', desc: '每波额外获得 20 军粮', tag: '经济', max: 5, apply: m => { m.waveGold += 20; } },
-  { id: 'hp1', name: '固守幼主', desc: '阿斗生命上限 +6 并立即恢复', tag: '防守', max: 4, apply: m => { m.adouHpBonus += 6; } },
-  { id: 'lowhp', name: '背水一战', desc: '阿斗生命低于40%时全军攻击 +45%', tag: '防守', max: 3, apply: m => { m.lowHpBuff += 0.45; } },
-  { id: 'cc1', name: '摄魂之威', desc: '控制时间 +35%', tag: '控制', max: 3, apply: m => { m.ccMul *= 1.35; } },
-  { id: 'crit1', name: '锐眼', desc: '暴击率 +12%', tag: '暴击', max: 5, apply: m => { m.crit += 0.12; } },
-  { id: 'crit2', name: '致命一击', desc: '暴击伤害 +60%', tag: '暴击', max: 5, apply: m => { m.critMul += 0.6; } },
-  { id: 'tier2', name: '精兵征募', desc: '征兵有25%概率直接获得二阶单位', tag: '征兵', max: 3, apply: m => { m.tier2Chance += 0.25; } },
-  { id: 'boss1', name: '斩将夺旗', desc: '对Boss与精锐伤害 +25%', tag: '通用', max: 4, apply: m => { m.bossDmg *= 1.25; } },
-  { id: 'rich', name: '军需先行', desc: '立即获得 120 军粮', tag: '经济', max: 3, apply: m => { m.startGold += 120; } },
+  { id: 'atk1', name: '全军奋勇', desc: '全军攻击力 +7.5%', tag: '通用', max: 5, apply: m => { m.atk *= 1.075; } },
+  { id: 'aspd1', name: '战鼓催征', desc: '全军攻击速度 +6%', tag: '通用', max: 5, apply: m => { m.aspd *= 1.06; } },
+  { id: 'dao1', name: '环首利刃', desc: '刀兵伤害 +20%', tag: '兵种', max: 4, apply: m => { m.troopAtk.dao *= 1.2; } },
+  { id: 'qiang1', name: '长枪列阵', desc: '枪兵伤害 +12.5%', tag: '兵种', max: 4, apply: m => { m.troopAtk.qiang *= 1.125; } },
+  { id: 'qi1', name: '铁骑冲阵', desc: '骑兵伤害 +27.5%', tag: '兵种', max: 4, apply: m => { m.troopAtk.qi *= 1.275; } },
+  { id: 'gong1', name: '强弓劲弩', desc: '弓兵射程 +0.8，伤害 +12.5%', tag: '兵种', max: 4, apply: m => { m.range.gong += 0.8; m.troopAtk.gong *= 1.125; } },
+  { id: 'hero1', name: '五虎威名', desc: '武将伤害 +15%', tag: '武将', max: 5, apply: m => { m.heroAtk *= 1.15; } },
+  { id: 'hero2', name: '将令如山', desc: '武将攻击速度 +10%', tag: '武将', max: 4, apply: m => { m.heroAspd *= 1.1; } },
+  { id: 'cdr1', name: '兵贵神速', desc: '技能冷却 -9%', tag: '武将', max: 4, apply: m => { m.cdr += 0.09; } },
+  { id: 'cost1', name: '号令三军', desc: '征兵价格 -9%', tag: '经济', max: 4, apply: m => { m.recruitCostMul *= 0.91; } },
+  { id: 'gold1', name: '就地取粮', desc: '击杀获得军粮 +17.5%', tag: '经济', max: 4, apply: m => { m.goldKillMul *= 1.175; } },
+  { id: 'gold2', name: '屯田积粟', desc: '每波额外获得 10 军粮', tag: '经济', max: 5, apply: m => { m.waveGold += 10; } },
+  { id: 'hp1', name: '固守幼主', desc: '阿斗生命上限 +3 并立即恢复', tag: '防守', max: 4, apply: m => { m.adouHpBonus += 3; } },
+  { id: 'lowhp', name: '背水一战', desc: '阿斗生命低于40%时全军攻击 +22.5%', tag: '防守', max: 3, apply: m => { m.lowHpBuff += 0.225; } },
+  { id: 'cc1', name: '摄魂之威', desc: '控制时间 +17.5%', tag: '控制', max: 3, apply: m => { m.ccMul *= 1.175; } },
+  { id: 'crit1', name: '锐眼', desc: '暴击率 +6%', tag: '暴击', max: 5, apply: m => { m.crit += 0.06; } },
+  { id: 'crit2', name: '致命一击', desc: '暴击伤害 +30%', tag: '暴击', max: 5, apply: m => { m.critMul += 0.3; } },
+  { id: 'tier2', name: '精兵征募', desc: '征兵有12.5%概率直接获得二阶单位', tag: '征兵', max: 3, apply: m => { m.tier2Chance += 0.125; } },
+  { id: 'boss1', name: '斩将夺旗', desc: '对Boss与精锐伤害 +12.5%', tag: '通用', max: 4, apply: m => { m.bossDmg *= 1.125; } },
+  { id: 'rich', name: '军需先行', desc: '立即获得 60 军粮', tag: '经济', max: 3, apply: m => { m.startGold += 60; } },
 ];
 
 // 永久成长

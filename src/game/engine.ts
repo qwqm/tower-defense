@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import {
   TROOPS, TROOP_KEYS, HEROES, HERO_KEYS, ENEMIES, BOSSES, LEVELS, CHAPTERS,
   buildWaves, newMods, BOONS, TIER_MUL, STAR_MUL, FRIENDLY_DAMAGE_SCALE,
-  FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, heroForChars,
+  FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, ENEMY_HP_SCALE,
+  MAX_UNIT_LEVEL, heroForChars,
   type TroopKey, type HeroKey, type Mods, type Boon, type EnemyKey,
 } from './data';
 import { sfx, vibrate } from './audio';
@@ -14,7 +15,7 @@ const T = 1.32;                       // 瓦片边长
 const HERO_TOKEN_CHANCE = 0.05;
 const ENEMY_SPAWN_INTERVAL_SCALE = 2.25;
 const ENEMY_GROUP_DELAY_SCALE = 1.5;
-const WAVE_BREAK_DURATION = 4.5;
+const WAVE_BREAK_DURATION = 8;
 const GRID_C = 5, GRID_R = 9;
 const GRID_TOP = 5.4;
 const colX = (c: number) => (c - (GRID_C - 1) / 2) * T;
@@ -49,7 +50,7 @@ const PATH: [number, number][] = [
 ];
 export const ADOU_POS = { x: colX(0), y: rowY(8) - T * 0.95 };
 export const CAM_CENTER_Y = (rowY(0) + T * 1.2 + ADOU_POS.y - T * 0.7) / 2;
-const PATH_SPEED_SCALE = 0.7;
+const PATH_SPEED_SCALE = 0.49;
 
 function cellPos(cell: number) {
   const b = BUILD[cell];
@@ -718,11 +719,11 @@ export class Game {
   canCombine(a: Unit, b: Unit) {
     if (a === b) return false;
     if (a.kind === 'troop' && b.kind === 'troop')
-      return a.key === b.key && a.lv === b.lv && a.lv < 3;
+      return a.key === b.key && a.lv === b.lv && a.lv < MAX_UNIT_LEVEL;
     if (a.kind === 'token' && b.kind === 'token')
       return !!heroForChars(a.tokenChar!, b.tokenChar!);
     if (a.kind === 'hero' && b.kind === 'hero')
-      return a.key === b.key && a.lv === b.lv && a.lv < 3;
+      return a.key === b.key && a.lv === b.lv && a.lv < MAX_UNIT_LEVEL;
     return false;
   }
 
@@ -879,7 +880,7 @@ export class Game {
 
   /** 合成：兵升阶 / 将魂双字觉醒 / 武将升星（结果落在 tgt 位） */
   doMerge(a: Unit, b: Unit, tgt: Loc, quiet = false): boolean {
-    if (a.kind === 'troop' && b.kind === 'troop' && a.key === b.key && a.lv === b.lv && a.lv < 3) {
+    if (a.kind === 'troop' && b.kind === 'troop' && a.key === b.key && a.lv === b.lv && a.lv < MAX_UNIT_LEVEL) {
       const key = a.key, lv = a.lv + 1;
       this.removeUnit(a); this.removeUnit(b);
       const nu = this.addUnit('troop', key, lv, [tgt]);
@@ -906,7 +907,7 @@ export class Game {
       if (!quiet) sfx('error');
       return false;
     }
-    if (a.kind === 'hero' && b.kind === 'hero' && a.key === b.key && a.lv === b.lv && a.lv < 3) {
+    if (a.kind === 'hero' && b.kind === 'hero' && a.key === b.key && a.lv === b.lv && a.lv < MAX_UNIT_LEVEL) {
       const cells = [...b.loc];
       this.removeUnit(a); this.removeUnit(b);
       const nu = this.addUnit('hero', a.key, a.lv + 1, cells);
@@ -1075,9 +1076,10 @@ export class Game {
     }
     const d = TROOPS[u.key as TroopKey];
     const mul = TIER_MUL[u.lv - 1];
+    const tierAttackSpeed = u.key === 'qi' && u.lv === MAX_UNIT_LEVEL ? 2 : 1;
     return {
       dmg: d.dmg * FRIENDLY_DAMAGE_SCALE * mul * this.mods.atk * this.mods.troopAtk[u.key as TroopKey] * this.opts.perm.troopDmg * low * buff,
-      cd: d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE / this.mods.aspd,
+      cd: d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE / (this.mods.aspd * tierAttackSpeed),
       range: d.range + this.mods.range[u.key as TroopKey] + (u.lv - 1) * 0.32,
       attack: d.attack, splash: (d.splash || 0) * (1 + this.mods.splashBonus),
       pierce: (d.pierce || 0) + this.mods.pierceBonus,
@@ -1096,7 +1098,7 @@ export class Game {
       this.seenEnemies.add(key);
     }
     const hpMul = boss ? (1 + this.level.index * 0.0) : this.level.hpMul;
-    const maxHp = boss ? def.hp * (1 + this.level.chapter * 0.6) : def.hp * hpMul;
+    const maxHp = (boss ? def.hp * (1 + this.level.chapter * 0.6) : def.hp * hpMul) * ENEMY_HP_SCALE;
     const size = boss ? 1.5 : def.size;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
       new THREE.MeshBasicMaterial({ map: pieceTexture(def.char, def.color, 1, false, true, boss), transparent: true }));
@@ -1218,7 +1220,7 @@ export class Game {
     }
   }
 
-  boonWaves = new Set([1, 3, 5, 7, 9]);
+  boonWaves = new Set([3, 9]);
   updateWaves(dt: number) {
     if (this.inBreak) {
       this.breakTime -= dt;
@@ -1449,6 +1451,37 @@ export class Game {
 
   attack(u: Unit, st: ReturnType<Game['statsOf']>, target: Enemy, p: { x: number; y: number }) {
     const color = u.hero ? HEROES[u.key as HeroKey].color : TROOPS[u.key as TroopKey].color;
+    if (!u.hero && u.key === 'qiang') {
+      let dx = target.x - p.x, dy = target.y - p.y;
+      const length = Math.hypot(dx, dy) || 1;
+      dx /= length; dy /= length;
+      this.fx.qiangPierce(p.x, p.y, dx, dy, length, color);
+      this.fx.ring(target.x, target.y, st.splash, color, 0.28, 0.6, 1.35);
+      const areaTargets = [
+        target,
+        ...this.enemies
+          .filter(e => e !== target && Math.hypot(e.x - target.x, e.y - target.y) <= st.splash)
+          .sort((a, b) => b.t - a.t),
+      ].slice(0, 3);
+      for (const e of areaTargets) this.damage(e, st.dmg, u);
+      return;
+    }
+    if (!u.hero && u.key === 'qi') {
+      const chargeTargets = [...this.enemies]
+        .filter(e => Math.hypot(e.x - p.x, e.y - p.y) <= st.range)
+        .sort((a, b) => b.t - a.t)
+        .slice(0, 3);
+      for (const e of chargeTargets) {
+        this.fx.machaoDash(p.x, p.y, e.x, e.y, color);
+        this.damage(e, st.dmg, u);
+        if (e.hp > 0) this.applyStun(e, e.boss ? 0.25 : 0.5);
+      }
+      if (chargeTargets.length > 0) {
+        const lead = chargeTargets[0];
+        this.fx.qiImpact(lead.x, lead.y, color);
+      }
+      return;
+    }
     switch (st.attack) {
       case 'aoe': {
         this.fx.daoSlash(p.x, p.y, target.x, target.y, color);
