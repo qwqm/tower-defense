@@ -22,22 +22,22 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
   dao: {
     key: 'dao', char: '刀', name: '刀兵', role: '单体高伤',
     desc: '挥刀点斩，单体伤害极高，克制精锐重甲。',
-    dmg: 26, cd: 1.15, range: 3.4, attack: 'single', color: '#1f2937',
+    dmg: 13, cd: 1.15, range: 3.4, attack: 'single', color: '#1f2937',
   },
   qiang: {
     key: 'qiang', char: '枪', name: '枪兵', role: '直线穿透',
     desc: '刺出枪芒，贯穿一条直线上的多名敌人。',
-    dmg: 15, cd: 1.05, range: 4.8, attack: 'pierce', pierce: 3, color: '#134e4a',
+    dmg: 7.5, cd: 1.05, range: 4.8, attack: 'pierce', pierce: 3, color: '#134e4a',
   },
   qi: {
     key: 'qi', char: '骑', name: '骑兵', role: '慢速范围爆发',
     desc: '铁骑冲碾一片，攻速很慢但单次范围伤害极高。',
-    dmg: 55, cd: 2.4, range: 4.0, attack: 'aoe', splash: 1.5, color: '#7c2d12',
+    dmg: 27.5, cd: 2.4, range: 4.0, attack: 'aoe', splash: 1.5, color: '#7c2d12',
   },
   gong: {
     key: 'gong', char: '弓', name: '弓兵', role: '远程持续',
     desc: '射程最远，稳定输出，可覆盖远端道路。',
-    dmg: 10, cd: 0.68, range: 6.6, attack: 'single', color: '#3f3f46',
+    dmg: 5, cd: 0.68, range: 6.6, attack: 'single', color: '#3f3f46',
   },
 };
 
@@ -68,38 +68,38 @@ export interface HeroDef {
 export const HEROES: Record<HeroKey, HeroDef> = {
   zhaoyun: {
     key: 'zhaoyun', char: '赵', name: '赵云', role: '直线贯穿核心输出',
-    chars: ['赵', '云'], dmg: 46, cd: 1.5, range: 7.2, attack: 'pierce', pierce: 6,
+    chars: ['赵', '云'], dmg: 23, cd: 1.5, range: 7.2, attack: 'pierce', pierce: 6,
     skill: '七进七出', skillDesc: '连续释放七道枪芒贯穿全线敌军，对Boss额外造成50%伤害。',
     skillCd: 13, advice: '横向长直道旁的地块，枪芒沿车道贯穿整排敌军。', color: '#1d4ed8',
   },
   guanyu: {
     key: 'guanyu', char: '关', name: '关羽', role: '范围爆发',
-    chars: ['关', '羽'], dmg: 62, cd: 1.75, range: 4.6, attack: 'aoe', splash: 1.7,
+    chars: ['关', '羽'], dmg: 31, cd: 1.75, range: 4.6, attack: 'aoe', splash: 1.7,
     skill: '青龙偃月', skillDesc: '斩出巨大扇形刀气，造成高额范围伤害并减速敌军4秒。',
     skillCd: 14, advice: '拐角内侧地块，可同时覆盖上下两条车道。', color: '#166534',
   },
   zhangfei: {
     key: 'zhangfei', char: '张', name: '张飞', role: '范围控制',
-    chars: ['张', '飞'], dmg: 42, cd: 1.4, range: 4.4, attack: 'aoe', splash: 1.5,
+    chars: ['张', '飞'], dmg: 21, cd: 1.4, range: 4.4, attack: 'aoe', splash: 1.5,
     skill: '当阳断喝', skillDesc: '震慑周围敌军，造成范围伤害并眩晕2.4秒（Boss 0.9秒）。',
     skillCd: 12, advice: '最后一排地块，贴近阿斗守住漏口。', color: '#3f3f46',
   },
   liubei: {
     key: 'liubei', char: '刘', name: '刘备', role: '团队辅助',
-    chars: ['刘', '备'], dmg: 30, cd: 1.35, range: 5.2, attack: 'single',
+    chars: ['刘', '备'], dmg: 15, cd: 1.35, range: 5.2, attack: 'single',
     skill: '仁德', skillDesc: '恢复阿斗2点生命；生命已满时改为全军攻击力提升35%持续9秒。',
     skillCd: 17, passive: '附近己方单位攻速提升25%。',
     advice: '地图中部地块，光环可覆盖上下相邻的己方单位。', color: '#a16207',
   },
   huangzhong: {
     key: 'huangzhong', char: '黄', name: '黄忠', role: '超远程输出',
-    chars: ['黄', '忠'], dmg: 52, cd: 1.25, range: 12, attack: 'single',
+    chars: ['黄', '忠'], dmg: 26, cd: 1.25, range: 12, attack: 'single',
     skill: '百步穿杨', skillDesc: '降下全屏箭雨，对所有敌军造成伤害，对Boss伤害提升60%。',
     skillCd: 15, advice: '任意地块皆可，射程足以横跨多条车道。', color: '#b45309',
   },
   machao: {
     key: 'machao', char: '马', name: '马超', role: '高速爆发',
-    chars: ['马', '超'], dmg: 36, cd: 0.85, range: 8, attack: 'burst',
+    chars: ['马', '超'], dmg: 18, cd: 0.85, range: 8, attack: 'burst',
     skill: '西凉突阵', skillDesc: '疾驰连击道路上的12名敌人；每击杀一人缩短下次技能1秒。',
     skillCd: 11, advice: '中部地块，可连击贯穿多条车道上的敌军。', color: '#9d174d',
   },
@@ -191,7 +191,7 @@ export const LEVELS: LevelDef[] = (() => {
         adouHp: 20 + c * 2,
         hpMul: ch.hpMul * (1 + i * 0.17),
         spdMul: ch.spdMul,
-        startGold: 34,
+        startGold: 20,
       });
     }
   }

@@ -10,6 +10,7 @@ import { FxEngine } from './fx';
 // ---------- 经典塔防地图 ----------
 // 5列 × 9行 瓦片地图，敌军沿蛇形道路行进，道路之间的空地为可布阵地块
 const T = 1.32;                       // 瓦片边长
+const HERO_TOKEN_CHANCE = 0.05;
 const GRID_C = 5, GRID_R = 9;
 const GRID_TOP = 5.4;
 const colX = (c: number) => (c - (GRID_C - 1) / 2) * T;
@@ -762,7 +763,6 @@ export class Game {
     const base = 12 + this.recruits * 4;
     return Math.max(10, Math.round(base * this.mods.recruitCostMul * this.opts.perm.costMul));
   }
-  tokenPity = 0;
   recruit() {
     if (this.ended) return false;
     const cost = this.recruitCost();
@@ -772,15 +772,12 @@ export class Game {
     for (const s of this.poolSlots) if (s) this.removeUnit(s);
     this.syncPool();
     for (let s = 0; s < 5; s++) {
-      let wantToken = Math.random() < 0.42;
-      if (this.tokenPity >= 3) wantToken = true;
+      const wantToken = Math.random() < HERO_TOKEN_CHANCE;
       if (wantToken) {
-        this.tokenPity = 0;
         const hk = HERO_KEYS[Math.floor(Math.random() * HERO_KEYS.length)];
         const ch = HEROES[hk].chars[Math.random() < 0.5 ? 0 : 1];
         this.addUnit('token', hk, 1, [{ t: 1, i: s }], ch);
       } else {
-        this.tokenPity++;
         const key = TROOP_KEYS[Math.floor(Math.random() * 4)];
         const lv = Math.random() < this.mods.tier2Chance ? 2 : 1;
         this.addUnit('troop', key, lv, [{ t: 1, i: s }]);
