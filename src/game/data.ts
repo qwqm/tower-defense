@@ -32,7 +32,7 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
   qi: {
     key: 'qi', char: '骑', name: '骑兵', role: '三目标冲锋控制',
     desc: '冲击射程内最靠前的三名敌军并令其短暂停步；攻速不随阶级变化。',
-    dmg: 27.5, cd: 2.4, range: 6.6, attack: 'burst', color: '#7c2d12',
+    dmg: 39, cd: 2.4, range: 6.6, attack: 'burst', color: '#7c2d12',
   },
   gong: {
     key: 'gong', char: '弓', name: '弓兵', role: '远程持续',
