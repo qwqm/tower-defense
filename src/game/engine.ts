@@ -363,7 +363,7 @@ export class Game {
   baseHW = 5; baseHH = 7;
   proj: { x: number; y: number; tx: number; ty: number; t: number; dur: number; dmg: number; src: Unit; target: Enemy; color: string }[] = [];
   dragging: Unit | null = null; dragMoved = false; downX = 0; downY = 0; downCell = -1;
-  heroLongPress: number | null = null;
+  heroDragPart: 0 | 1 | null = null;
   snapAcc = 0;
   effPool: THREE.Mesh[] = [];
   destroyed = false;
@@ -578,21 +578,13 @@ export class Game {
     this.downCell = u ? u.loc[0].i : cellAt(w.x, w.y);
     if (u) {
       this.dragging = u;
-      u.mesh.position.set(w.x, w.y, 3);
-      u.mesh.scale.set(1.3, 1.3, 1);
-      if (u.barMesh) u.barMesh.position.set(w.x, w.y, 2.9);
-      this.showDropHints(u);
-      if (u.kind === 'hero') {
-        this.heroLongPress = window.setTimeout(() => {
-          this.heroLongPress = null;
-          if (this.dragging !== u || this.dragMoved) return;
-          this.dragging = null;
-          this.clearDropHints();
-          u.mesh.scale.set(1, 1, 1);
-          this.settle(u);
-          this.splitHero(u);
-        }, 550);
+      this.heroDragPart = u.kind === 'hero' ? (w.x < this.unitPos(u).x ? 0 : 1) : null;
+      if (u.kind !== 'hero') {
+        u.mesh.position.set(w.x, w.y, 3);
+        u.mesh.scale.set(1.3, 1.3, 1);
+        if (u.barMesh) u.barMesh.position.set(w.x, w.y, 2.9);
       }
+      this.showDropHints(u);
       try { this.canvas.setPointerCapture(e.pointerId); } catch { /* */ }
     }
   };
@@ -601,7 +593,14 @@ export class Game {
     e.preventDefault?.();
     if (Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > 6) {
       this.dragMoved = true;
-      this.clearHeroLongPress();
+      if (this.dragging.kind === 'hero' && this.heroDragPart !== null) {
+        const token = this.splitHeroForDrag(this.dragging, this.heroDragPart);
+        if (token) {
+          this.dragging = token;
+          this.clearDropHints();
+          this.showDropHints(token);
+        }
+      }
     }
     const w = this.toWorld(e.clientX, e.clientY);
     this.dragging.mesh.position.set(w.x, w.y, 3);
@@ -609,11 +608,11 @@ export class Game {
     this.highlightDrop(nearestCell(w.x, w.y));
   };
   onUp = (e: PointerEvent) => {
-    this.clearHeroLongPress();
     // 将魂池 DOM 拖拽由 endPoolDrag 收尾，此处直接跳过
     if (this.poolDragActive) return;
     const u = this.dragging;
     this.dragging = null;
+    this.heroDragPart = null;
     this.clearDropHints();
     try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* */ }
     if (!u) {
@@ -640,20 +639,16 @@ export class Game {
       else this.settle(u);
       return;
     }
-    if (cell < 0) { this.settle(u); return; }
+    if (cell < 0) { this.settle(u); this.scanAwaken(); return; }
     this.placeUnitAt(u, { t: 0, i: cell });
   };
   onCancel = () => {
-    this.clearHeroLongPress();
     const u = this.dragging;
     this.dragging = null;
+    this.heroDragPart = null;
     this.clearDropHints();
-    if (u) { u.mesh.scale.set(1, 1, 1); this.settle(u); }
+    if (u) { u.mesh.scale.set(1, 1, 1); this.settle(u); this.scanAwaken(); }
   };
-  clearHeroLongPress() {
-    if (this.heroLongPress !== null) window.clearTimeout(this.heroLongPress);
-    this.heroLongPress = null;
-  }
 
   // ---- 将魂池（底部 5 槽）拖拽 API（由 React 池界面调用）----
   poolRect: DOMRect | null = null;
@@ -867,7 +862,7 @@ export class Game {
   /** 落子/合成/交换/入池 统一入口 */
   placeUnitAt(u: Unit, tgt: Loc) {
     // 落在自己占位上 → 原地
-    if (u.loc.some(l => l.t === tgt.t && l.i === tgt.i)) { this.settle(u); return; }
+    if (u.loc.some(l => l.t === tgt.t && l.i === tgt.i)) { this.settle(u); this.scanAwaken(); return; }
     const occ = this.unitAtLoc(tgt);
     if (occ && occ !== u) {
       if (this.canCombine(u, occ)) { if (this.doMerge(u, occ, tgt)) return; return; }
@@ -1002,17 +997,15 @@ export class Game {
     this.pauseFx = field ? 0.42 : 0.3;
     this.opts.onEvent(upgrade ? 'heroUp' : 'heroBorn', { key: u.key, name: def.name, star: u.lv, char: def.char, skill: def.skill });
   }
-  /** 长按武将后还原为两个单字将魂；逆序放回以避免立即再次觉醒。 */
-  splitHero(u: Unit) {
-    if (u.kind !== 'hero' || u.loc.length !== 2) return false;
+  /** 拖动武将任一半时，将该半还原为对应单字并交给拖拽。 */
+  splitHeroForDrag(u: Unit, part: 0 | 1) {
+    if (u.kind !== 'hero' || u.loc.length !== 2) return null;
     const d = HEROES[u.key as HeroKey];
     const [first, second] = [...u.loc].sort((a, b) => a.i - b.i);
     this.removeUnit(u);
-    this.addUnit('token', d.key, 1, [first], d.chars[1]);
-    this.addUnit('token', d.key, 1, [second], d.chars[0]);
-    this.opts.onEvent('split', { name: d.name });
-    sfx('click');
-    return true;
+    const left = this.addUnit('token', d.key, 1, [first], d.chars[0]);
+    const right = this.addUnit('token', d.key, 1, [second], d.chars[1]);
+    return part === 0 ? left : right;
   }
   mergeFx(p: { x: number; y: number }, color: string, big: boolean) {
     void color;
@@ -1901,7 +1894,6 @@ export class Game {
 
   dispose() {
     this.destroyed = true;
-    this.clearHeroLongPress();
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('pointerdown', this.onDown);
