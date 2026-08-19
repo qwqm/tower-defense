@@ -26,7 +26,7 @@ const TUT: { text: string; wait: string }[] = [
   { text: '不想要的棋子拖进将魂池，下次征兵即销毁（垃圾桶）', wait: 'tap' },
   { text: '击杀敌军获得军粮，军粮用于继续征兵', wait: 'tap' },
   { text: '将魂池里同样可以拖动合成，先配好再上阵', wait: 'tap' },
-  { text: '相配将魂须按顺序并排放置（左赵右云），两字会加框并激活武将！', wait: 'tap' },
+  { text: '相配将魂须按顺序并排放置（左赵右云），武将会觉醒并占两格；长按武将可拆回单字！', wait: 'tap' },
 ];
 const WAVE_COUNTDOWN_DURATION = 5;
 
@@ -84,6 +84,7 @@ export function Battle(p: Props) {
         else if (type === 'bossDead') toast(`${payload.name} 授首！`);
         else if (type === 'poolTap') { setPoolInfo(payload); }
         else if (type === 'recruited' || type === 'merged' || type === 'moved') { setPoolInfo(null); }
+        else if (type === 'split') toast(`${payload.name} 已拆分`, '重新按正确顺序排列可再次觉醒');
         else if (type === 'end') {
           const res = payload as EndResult;
           if (!res.win && !res.revived) { setDead(res); return; }
@@ -134,8 +135,18 @@ export function Battle(p: Props) {
     dragStart.current = { x: e.clientX, y: e.clientY };
     setPoolInfo(null);
     setDrag({ key: tile.key, x: e.clientX, y: e.clientY, moved: false, tile });
+    let longPress: number | null = null;
+    let split = false;
+    if (unit.kind === 'hero') {
+      longPress = window.setTimeout(() => {
+        split = true;
+        gameRef.current?.splitHero(unit);
+        setDrag(null);
+      }, 550);
+    }
     const move = (ev: PointerEvent) => {
       const moved = Math.hypot(ev.clientX - dragStart.current.x, ev.clientY - dragStart.current.y) > 8;
+      if (moved && longPress !== null) { window.clearTimeout(longPress); longPress = null; }
       setDrag(d => d ? { ...d, x: ev.clientX, y: ev.clientY, moved } : d);
       if (moved) gameRef.current?.startPoolDrag(unit);
     };
@@ -143,6 +154,8 @@ export function Battle(p: Props) {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      if (longPress !== null) window.clearTimeout(longPress);
+      if (split) return;
       const moved = Math.hypot(ev.clientX - dragStart.current.x, ev.clientY - dragStart.current.y) > 8;
       gameRef.current?.endPoolDrag(ev.clientX, ev.clientY, moved);
       setDrag(null);
@@ -320,7 +333,7 @@ export function Battle(p: Props) {
             );
           })}
         </div>
-        <div className="mt-1 text-center text-[10px] text-[#7a6a55]">将魂按顺序相邻即可激活武将 · 拖上战场列阵 · 征兵时池中棋子全部销毁</div>
+        <div className="mt-1 text-center text-[10px] text-[#7a6a55]">将魂按顺序相邻即可觉醒武将 · 长按武将可拆分 · 征兵时池中棋子全部销毁</div>
       </div>
 
       {/* 拖拽幽灵 */}
