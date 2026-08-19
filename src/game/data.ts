@@ -121,7 +121,7 @@ export const HEROES: Record<HeroKey, HeroDef> = {
   lubu: {
     key: 'lubu', char: '吕', name: '吕布', role: '跃击范围控制',
     chars: ['吕', '布'], dmg: 34, cd: 1.6, range: 4.8, attack: 'aoe', splash: 1.65,
-    skill: '无双震慑', skillDesc: '锁定最靠近阿斗的敌军，预警1秒后跃击落点，造成范围伤害并恐惧敌军2秒。恐惧时敌军反向移动，移速降低80%。',
+    skill: '无双震慑', skillDesc: '锁定最靠近阿斗的敌军，预警1秒后跃击落点，造成范围伤害并恐惧敌军2秒。恐惧时敌军反向移动，移速降低60%。',
     skillCd: 20, advice: '靠近道路中段布阵，普攻与跃击都能覆盖更多敌军。', color: '#991b1b',
   },
 };

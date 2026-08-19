@@ -1394,8 +1394,8 @@ export class Game {
       let sp = e.speed * e.slowMul;
       if (e.chargeT > 0) { e.chargeT -= dt; if (e.fearT <= 0) sp *= 3.5; }
       if (e.stun > 0) sp = 0;
-      // 恐惧：敌军掉头后撤，移动速度降低80%。
-      if (e.fearT > 0) e.t = Math.max(0, e.t - e.speed * 0.2 * dt);
+      // 恐惧：敌军掉头后撤，移动速度降低60%。
+      if (e.fearT > 0) e.t = Math.max(0, e.t - e.speed * 0.4 * dt);
       else e.t += sp * dt;
       const p = pathPoint(e.t);
       e.x = p.x; e.y = p.y;
