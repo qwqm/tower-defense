@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+html, body, #root { height: 100%; margin: 0; overscroll-behavior: none; }
+body {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  background: #1c1814;
+  user-select: none;
+}
+button { touch-action: manipulation; }
+
+.ink-title {
+  font-family: "STKaiti", "KaiTi", "Songti SC", "SimSun", serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.ink-seal { font-family: "STKaiti", "KaiTi", serif; }
+
+.ink-bg {
+  background:
+    radial-gradient(60% 40% at 20% 12%, rgba(60,45,30,0.13), transparent 70%),
+    radial-gradient(70% 45% at 85% 30%, rgba(120,40,20,0.10), transparent 70%),
+    radial-gradient(90% 50% at 50% 100%, rgba(40,35,25,0.20), transparent 70%);
+}
+
+@keyframes floatInk {
+  0%   { transform: translateY(0) rotate(-3deg); opacity: 0.18; }
+  50%  { transform: translateY(-24px) rotate(3deg); opacity: 0.30; }
+  100% { transform: translateY(0) rotate(-3deg); opacity: 0.18; }
+}
+.float-ink { animation: floatInk 10s ease-in-out infinite; }
+
+@keyframes pop {
+  0%   { transform: scale(0.7); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.anim-pop { animation: pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
+
+@keyframes heroBurst {
+  0%   { transform: scale(0.2) rotate(-18deg); opacity: 0; filter: blur(10px); }
+  35%  { transform: scale(1.28) rotate(4deg); opacity: 1; filter: blur(0); }
+  60%  { transform: scale(1.0) rotate(0deg); }
+  100% { transform: scale(1.06); opacity: 1; }
+}
+.hero-burst { animation: heroBurst 0.85s cubic-bezier(0.15, 0.9, 0.25, 1.2) both; }
+
+@keyframes bossIn {
+  0%   { transform: scale(3.4); opacity: 0; filter: blur(24px); }
+  40%  { transform: scale(1); opacity: 1; filter: blur(0); }
+  55%  { transform: scale(1.08) translateX(-6px); }
+  65%  { transform: scale(1.02) translateX(6px); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.boss-in { animation: bossIn 1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: rgba(59,50,41,0.28); border-radius: 4px; }
