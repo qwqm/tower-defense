@@ -268,6 +268,8 @@ export interface Unit {
   loc: Loc[];             // 占位（武将占相邻2格）
   cd: number; skillCd: number; skillMax: number; kills: number;
   stun: number; mesh: THREE.Mesh; barMesh?: THREE.Mesh;
+  /** 将魂按正确顺序相邻时，仅左字承载武将战斗能力，右字仍可独立移动。 */
+  activeHero?: HeroKey; heroPartnerId?: number; heroLeaderId?: number;
 }
 
 // 可布阵地块的水平相邻对（武将觉醒/移动用）
@@ -295,6 +297,7 @@ interface Effect {
   vx?: number; vy?: number; s0?: number; s1?: number; rot?: number;
   target?: Enemy;
 }
+interface ActiveHeroFrame { leader: Unit; partner: Unit; mesh: THREE.LineSegments; }
 export interface Snapshot {
   gold: number; wave: number; waves: number; adouHp: number; adouMax: number;
   cost: number; kills: number; paused: boolean; speed: number;
@@ -366,12 +369,13 @@ export class Game {
   snapAcc = 0;
   effPool: THREE.Mesh[] = [];
   destroyed = false;
+  activeHeroFrames: ActiveHeroFrame[] = [];
   heroKillNames: Record<string, number> = {};
   peakHeroCount = 0; taoyuan = false; wuhu = false; maxHeroKills = 0;
 
   trackOwnership() {
-    const hs = this.units.filter(u => u.hero);
-    const keys = new Set(hs.map(u => u.key));
+    const hs = this.units.filter(u => this.isHeroUnit(u));
+    const keys = new Set(hs.map(u => this.heroKeyOf(u)));
     this.peakHeroCount = Math.max(this.peakHeroCount, hs.length);
     if (keys.has('liubei') && keys.has('guanyu') && keys.has('zhangfei')) this.taoyuan = true;
     if (keys.size >= 5) this.wuhu = true;
@@ -546,8 +550,18 @@ export class Game {
   unitAtCell(cell: number) { return this.units.find(u => u.loc.some(l => l.t === 0 && l.i === cell)) || null; }
   unitAtLoc(loc: Loc) { return this.units.find(u => u.loc.some(l => l.t === loc.t && l.i === loc.i)) || null; }
   onField(u: Unit) { return u.loc[0].t === 0; }
+  isHeroUnit(u: Unit) { return u.hero || !!u.activeHero; }
+  heroKeyOf(u: Unit): HeroKey { return (u.activeHero || u.key) as HeroKey; }
+  heroPartner(u: Unit) {
+    return u.heroPartnerId ? this.units.find(x => x.id === u.heroPartnerId) || null : null;
+  }
   /** 单位中心位置（武将=两格中点，仅战场单位） */
   unitPos(u: Unit) {
+    const partner = this.heroPartner(u);
+    if (partner && partner.loc[0].t === u.loc[0].t) {
+      const a = cellPos(u.loc[0].i), b = cellPos(partner.loc[0].i);
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
     if (u.loc.length === 2) {
       const a = cellPos(u.loc[0].i), b = cellPos(u.loc[1].i);
       return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -668,18 +682,19 @@ export class Game {
   }
   describe(u: Unit) {
     const st = this.statsOf(u);
-    if (u.kind === 'token') {
+    if (u.kind === 'token' && !this.isHeroUnit(u)) {
       const d = HEROES[u.key as HeroKey];
       const other = d.chars[0] === u.tokenChar ? d.chars[1] : d.chars[0];
-      return { name: `将魂·${u.tokenChar ?? ''}`, sub: `与「${other}」相邻即觉醒${d.name}`, lv: 1, hero: false, dmg: 0, aspd: 0, range: 0 };
+      return { name: `将魂·${u.tokenChar ?? ''}`, sub: `按正确顺序与「${other}」相邻即可激活${d.name}`, lv: 1, hero: false, dmg: 0, aspd: 0, range: 0 };
     }
-    const def: any = u.kind === 'hero' ? HEROES[u.key as HeroKey] : TROOPS[u.key as TroopKey];
+    const hero = this.isHeroUnit(u);
+    const def: any = hero ? HEROES[this.heroKeyOf(u)] : TROOPS[u.key as TroopKey];
     return {
-      name: def.name, sub: def.role, lv: u.lv, hero: u.kind === 'hero',
+      name: def.name, sub: def.role, lv: u.lv, hero,
       dmg: Math.round(st.dmg), aspd: Math.round((1 / st.cd) * 100) / 100,
       range: Math.round(st.range * 10) / 10,
-      skill: u.kind === 'hero' ? def.skill : undefined,
-      skillPct: u.kind === 'hero' ? Math.max(0, Math.min(1, 1 - u.skillCd / (def.skillCd * (1 - this.mods.cdr)))) : undefined,
+      skill: hero ? def.skill : undefined,
+      skillPct: hero ? Math.max(0, Math.min(1, 1 - u.skillCd / (def.skillCd * (1 - this.mods.cdr)))) : undefined,
     };
   }
 
@@ -721,11 +736,71 @@ export class Game {
     if (a === b) return false;
     if (a.kind === 'troop' && b.kind === 'troop')
       return a.key === b.key && a.lv === b.lv && a.lv < MAX_UNIT_LEVEL;
-    if (a.kind === 'token' && b.kind === 'token')
-      return !!heroForChars(a.tokenChar!, b.tokenChar!);
+    // 将魂通过按顺序相邻自动激活，不再通过叠放合成为另一枚棋子。
+    if (a.kind === 'token' && b.kind === 'token') return false;
     if (a.kind === 'hero' && b.kind === 'hero')
       return a.key === b.key && a.lv === b.lv && a.lv < MAX_UNIT_LEVEL;
     return false;
+  }
+  /** 相邻将魂按左→右（池内按槽位）排序后判定；逆序不会觉醒。 */
+  heroForTokenPair(a: Unit, b: Unit): HeroKey | null {
+    if (a.loc[0].t !== b.loc[0].t) return null;
+    const [first, second] = [a, b].sort((x, y) => x.loc[0].i - y.loc[0].i);
+    const adjacent = first.loc[0].t === 1
+      ? second.loc[0].i === first.loc[0].i + 1
+      : areAdjacent(first.loc[0].i, second.loc[0].i);
+    return adjacent ? heroForChars(first.tokenChar!, second.tokenChar!) : null;
+  }
+  activateTokenHero(a: Unit, b: Unit, key: HeroKey) {
+    const [leader, partner] = [a, b].sort((x, y) => x.loc[0].i - y.loc[0].i);
+    if (leader.activeHero || partner.heroLeaderId) return;
+    leader.activeHero = key;
+    leader.heroPartnerId = partner.id;
+    partner.heroLeaderId = leader.id;
+    leader.cd = 0.3;
+    leader.skillCd = HEROES[key].skillCd * 0.55;
+    leader.skillMax = HEROES[key].skillCd;
+    const geo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(T * 1.92, T * 0.96));
+    const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(HEROES[key].color), transparent: true, opacity: 0.9 });
+    const frame = new THREE.LineSegments(geo, mat);
+    frame.position.z = 0.22;
+    this.scene.add(frame);
+    this.activeHeroFrames.push({ leader, partner, mesh: frame });
+    this.updateActiveHeroFrames();
+    this.madeHeroes.add(key);
+    this.trackOwnership();
+    this.heroBornFx(leader, false);
+  }
+  deactivateHeroForToken(u: Unit) {
+    const leader = u.activeHero ? u : u.heroLeaderId ? this.units.find(x => x.id === u.heroLeaderId) : null;
+    if (!leader?.activeHero) return;
+    const partner = this.heroPartner(leader);
+    delete leader.activeHero; delete leader.heroPartnerId;
+    if (partner) delete partner.heroLeaderId;
+    for (let i = this.activeHeroFrames.length - 1; i >= 0; i--) {
+      const f = this.activeHeroFrames[i];
+      if (f.leader !== leader) continue;
+      this.scene.remove(f.mesh);
+      f.mesh.geometry.dispose();
+      (f.mesh.material as THREE.Material).dispose();
+      this.activeHeroFrames.splice(i, 1);
+    }
+    this.trackOwnership();
+  }
+  updateActiveHeroFrames() {
+    for (const f of [...this.activeHeroFrames]) {
+      if (!this.units.includes(f.leader) || !this.units.includes(f.partner) ||
+        !f.leader.activeHero || this.heroForTokenPair(f.leader, f.partner) !== f.leader.activeHero) {
+        this.deactivateHeroForToken(f.leader);
+        continue;
+      }
+      const visible = this.onField(f.leader) && this.onField(f.partner);
+      f.mesh.visible = visible;
+      if (visible) {
+        const p = this.unitPos(f.leader);
+        f.mesh.position.set(p.x, p.y, 0.22);
+      }
+    }
   }
 
   select(u: Unit | null) {
@@ -826,6 +901,7 @@ export class Game {
     return u;
   }
   removeUnit(u: Unit) {
+    if (u.kind === 'token') this.deactivateHeroForToken(u);
     this.scene.remove(u.mesh);
     u.mesh.geometry.dispose();
     if (u.barMesh) { this.scene.remove(u.barMesh); u.barMesh.geometry.dispose(); }
@@ -839,6 +915,7 @@ export class Game {
   placeUnitAt(u: Unit, tgt: Loc) {
     // 落在自己占位上 → 原地
     if (u.loc.some(l => l.t === tgt.t && l.i === tgt.i)) { this.settle(u); return; }
+    if (u.kind === 'token') this.deactivateHeroForToken(u);
     const occ = this.unitAtLoc(tgt);
     if (occ && occ !== u) {
       if (this.canCombine(u, occ)) { if (this.doMerge(u, occ, tgt)) return; return; }
@@ -895,7 +972,7 @@ export class Game {
       return true;
     }
     if (a.kind === 'token' && b.kind === 'token') {
-      const hk = heroForChars(a.tokenChar!, b.tokenChar!);
+      const hk = this.heroForTokenPair(a, b);
       if (hk) {
         const pair = this.adjacentPairFor(tgt, a);
         if (!pair) { if (!quiet) sfx('error'); return false; }
@@ -928,17 +1005,19 @@ export class Game {
       for (let j = i + 1; j < toksF.length; j++) {
         const b = toksF[j];
         if (!this.units.includes(b)) continue;
+        if (a.activeHero || a.heroLeaderId || b.activeHero || b.heroLeaderId) continue;
         if (!areAdjacent(a.loc[0].i, b.loc[0].i)) continue;
-        const hk = heroForChars(a.tokenChar!, b.tokenChar!);
-        if (hk && this.doMerge(a, b, { t: 0, i: b.loc[0].i }, true)) return;
+        const hk = this.heroForTokenPair(a, b);
+        if (hk) { this.activateTokenHero(a, b, hk); return; }
       }
     }
     // 将魂池（相邻槽位）
     for (let i = 0; i < 4; i++) {
       const a = this.poolSlots[i], b = this.poolSlots[i + 1];
       if (a?.kind === 'token' && b?.kind === 'token') {
-        const hk = heroForChars(a.tokenChar!, b.tokenChar!);
-        if (hk && this.doMerge(a, b, { t: 1, i: i + 1 }, true)) return;
+        if (a.activeHero || a.heroLeaderId || b.activeHero || b.heroLeaderId) continue;
+        const hk = this.heroForTokenPair(a, b);
+        if (hk) { this.activateTokenHero(a, b, hk); return; }
       }
     }
   }
@@ -973,7 +1052,6 @@ export class Game {
     this.pauseFx = field ? 0.42 : 0.3;
     this.opts.onEvent(upgrade ? 'heroUp' : 'heroBorn', { key: u.key, name: def.name, star: u.lv, char: def.char, skill: def.skill });
   }
-
   mergeFx(p: { x: number; y: number }, color: string, big: boolean) {
     void color;
     this.fx.mergeBurst(p.x, p.y, big);
@@ -1058,8 +1136,8 @@ export class Game {
   statsOf(u: Unit) {
     const low = this.adouHp / this.adouMax < 0.4 ? (1 + this.mods.lowHpBuff) : 1;
     const buff = this.atkBuffT > 0 ? (1 + this.atkBuff) : 1;
-    if (u.hero) {
-      const d = HEROES[u.key as HeroKey];
+    if (this.isHeroUnit(u)) {
+      const d = HEROES[this.heroKeyOf(u)];
       const mul = STAR_MUL[u.lv - 1];
       return {
         dmg: d.dmg * FRIENDLY_DAMAGE_SCALE * mul * this.mods.atk * this.mods.heroAtk * this.opts.perm.heroDmg * low * buff,
@@ -1172,8 +1250,8 @@ export class Game {
   }
   unitName(u: Unit) {
     if (u.kind === 'troop') return TROOPS[u.key as TroopKey].name;
-    if (u.kind === 'token') return `将魂·${u.tokenChar ?? ''}`;
-    return HEROES[u.key as HeroKey].name;
+    if (!this.isHeroUnit(u)) return `将魂·${u.tokenChar ?? ''}`;
+    return HEROES[this.heroKeyOf(u)].name;
   }
 
   // ---------- 主循环 ----------
@@ -1192,6 +1270,7 @@ export class Game {
     if (this.atkBuffT > 0) this.atkBuffT -= dt;
     this.updateWaves(dt);
     this.updateEnemies(dt);
+    this.updateActiveHeroFrames();
     this.updateUnits(dt);
     this.updateFires(dt);
     this.updateEffects(dt);
@@ -1407,9 +1486,9 @@ export class Game {
   updateUnits(dt: number) {
     // 术士光环 & 刘备光环
     const sorcerers = this.enemies.filter(e => e.aura);
-    const liubeis = this.units.filter(u => u.hero && u.key === 'liubei' && this.onField(u));
+    const liubeis = this.units.filter(u => this.isHeroUnit(u) && this.heroKeyOf(u) === 'liubei' && this.onField(u));
     for (const u of this.units) {
-      if (!this.onField(u) || u.kind === 'token') continue; // 池中单位与将魂字牌不参战
+      if (!this.onField(u) || (u.kind === 'token' && !this.isHeroUnit(u))) continue; // 池中单位与未激活将魂不参战
       const p = this.unitPos(u);
       if (u.stun > 0) { u.stun -= dt; u.mesh.rotation.z = Math.sin(this.time * 30) * 0.15; continue; }
       u.mesh.rotation.z = 0;
@@ -1422,11 +1501,11 @@ export class Game {
       }
       const st = this.statsOf(u);
       u.cd -= dt * aspd;
-      if (u.hero) {
+      if (this.isHeroUnit(u)) {
         u.skillCd -= dt;
-        if (u.skillCd <= 0 && (this.enemies.length > 0 || u.key === 'liubei')) {
+        if (u.skillCd <= 0 && (this.enemies.length > 0 || this.heroKeyOf(u) === 'liubei')) {
           if (this.enemies.length > 0 || this.adouHp < this.adouMax) {
-            u.skillCd = HEROES[u.key as HeroKey].skillCd * (1 - this.mods.cdr);
+            u.skillCd = HEROES[this.heroKeyOf(u)].skillCd * (1 - this.mods.cdr);
             this.castSkill(u);
           }
         }
@@ -1462,8 +1541,9 @@ export class Game {
   }
 
   attack(u: Unit, st: ReturnType<Game['statsOf']>, target: Enemy, p: { x: number; y: number }) {
-    const color = u.hero ? HEROES[u.key as HeroKey].color : TROOPS[u.key as TroopKey].color;
-    if (!u.hero && u.key === 'qiang') {
+    const hero = this.isHeroUnit(u);
+    const color = hero ? HEROES[this.heroKeyOf(u)].color : TROOPS[u.key as TroopKey].color;
+    if (!hero && u.key === 'qiang') {
       let dx = target.x - p.x, dy = target.y - p.y;
       const length = Math.hypot(dx, dy) || 1;
       dx /= length; dy /= length;
@@ -1478,7 +1558,7 @@ export class Game {
       for (const e of areaTargets) this.damage(e, st.dmg, u);
       return;
     }
-    if (!u.hero && u.key === 'qi') {
+    if (!hero && u.key === 'qi') {
       const chargeTargets = [...this.enemies]
         .filter(e => Math.hypot(e.x - p.x, e.y - p.y) <= st.range)
         .sort((a, b) => b.t - a.t)
@@ -1532,13 +1612,14 @@ export class Game {
 
   // ---------- 武将技能 ----------
   castSkill(u: Unit) {
-    const d = HEROES[u.key as HeroKey];
+    const heroKey = this.heroKeyOf(u);
+    const d = HEROES[heroKey];
     const st = this.statsOf(u);
     const p = this.unitPos(u);
     sfx('skill');
     this.shake(0.22, 0.25);
     this.opts.onEvent('skill', { name: d.name, skill: d.skill, char: d.char, color: d.color });
-    switch (u.key) {
+    switch (heroKey) {
       case 'zhaoyun': {
         for (let i = 0; i < 7; i++) {
           setTimeout(() => {
@@ -1746,7 +1827,7 @@ export class Game {
     let sel: Snapshot['selected'] = null;
     if (u && this.units.includes(u)) {
       const st = this.statsOf(u);
-      if (u.kind === 'token') {
+      if (u.kind === 'token' && !this.isHeroUnit(u)) {
         const d = HEROES[u.key as HeroKey];
         const other = d.chars[0] === u.tokenChar ? d.chars[1] : d.chars[0];
         sel = {
@@ -1755,13 +1836,14 @@ export class Game {
           aspd: Math.round((1 / st.cd) * 100) / 100, range: Math.round(st.range * 10) / 10,
         };
       } else {
-        const def: any = u.hero ? HEROES[u.key as HeroKey] : TROOPS[u.key as TroopKey];
+        const hero = this.isHeroUnit(u);
+        const def: any = hero ? HEROES[this.heroKeyOf(u)] : TROOPS[u.key as TroopKey];
         sel = {
-          name: def.name, sub: def.role, lv: u.lv, hero: u.hero,
+          name: def.name, sub: def.role, lv: u.lv, hero,
           dmg: Math.round(st.dmg), aspd: Math.round((1 / st.cd) * 100) / 100,
           range: Math.round(st.range * 10) / 10,
-          skill: u.hero ? def.skill : undefined,
-          skillPct: u.hero ? Math.max(0, Math.min(1, 1 - u.skillCd / (def.skillCd * (1 - this.mods.cdr)))) : undefined,
+          skill: hero ? def.skill : undefined,
+          skillPct: hero ? Math.max(0, Math.min(1, 1 - u.skillCd / (def.skillCd * (1 - this.mods.cdr)))) : undefined,
         };
       }
     } else if (u) this.selected = null;
@@ -1816,10 +1898,10 @@ export class Game {
   finish(win: boolean) {
     if (this.ended) return;
     this.ended = true;
-    const heroes = this.units.filter(u => u.hero);
+    const heroes = this.units.filter(u => this.isHeroUnit(u));
     let best: { name: string; kills: number } | null = null;
     for (const u of this.units) {
-      const tag = u.kind === 'hero' ? ` ${u.lv}★` : u.kind === 'troop' ? ` ${u.lv}阶` : '';
+      const tag = this.isHeroUnit(u) ? ` ${u.lv}★` : u.kind === 'troop' ? ` ${u.lv}阶` : '';
       if (!best || u.kills > best.kills) best = { name: this.unitName(u) + tag, kills: u.kills };
     }
     let stars = 0;
@@ -1833,7 +1915,7 @@ export class Game {
       win, stars, kills: this.kills, adouHp: this.adouHp, adouMax: this.adouMax,
       wave: this.wave, goldLeft: Math.floor(this.gold), timeSec: Math.round(this.time),
       revived: this.revived, bestHero: best,
-      heroes: heroes.map(h => h.key), maxStar: heroes.reduce((a, h) => Math.max(a, h.lv), 0),
+      heroes: heroes.map(h => this.heroKeyOf(h)), maxStar: heroes.reduce((a, h) => Math.max(a, h.lv), 0),
       heroCount: heroes.length,
       seenEnemies: [...this.seenEnemies], seenBoss: [...this.seenBoss],
       madeHeroes: [...this.madeHeroes], madeTroops: [...this.madeTroops],
@@ -1856,8 +1938,8 @@ export class Game {
 
   setPaused(v: boolean) { this.paused = v; this.pushSnapshot(); }
   setSpeed(v: number) { this.speed = v; this.pushSnapshot(); }
-  maxHeroCount() { return this.units.filter(u => u.hero).length; }
-  heroKeysOnBoard() { return this.units.filter(u => u.hero).map(u => u.key); }
+  maxHeroCount() { return this.units.filter(u => this.isHeroUnit(u)).length; }
+  heroKeysOnBoard() { return this.units.filter(u => this.isHeroUnit(u)).map(u => this.heroKeyOf(u)); }
 
   dispose() {
     this.destroyed = true;

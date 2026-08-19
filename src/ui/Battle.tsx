@@ -26,7 +26,7 @@ const TUT: { text: string; wait: string }[] = [
   { text: '不想要的棋子拖进将魂池，下次征兵即销毁（垃圾桶）', wait: 'tap' },
   { text: '击杀敌军获得军粮，军粮用于继续征兵', wait: 'tap' },
   { text: '将魂池里同样可以拖动合成，先配好再上阵', wait: 'tap' },
-  { text: '相配的两枚将魂并排放置（赵+云），武将自动觉醒并占两格！', wait: 'tap' },
+  { text: '相配将魂须按顺序并排放置（左赵右云），两字会加框并激活武将！', wait: 'tap' },
 ];
 const WAVE_COUNTDOWN_DURATION = 5;
 
@@ -320,7 +320,7 @@ export function Battle(p: Props) {
             );
           })}
         </div>
-        <div className="mt-1 text-center text-[10px] text-[#7a6a55]">拖到空位可合成 · 拖上战场列阵 · 征兵时池中棋子全部销毁</div>
+        <div className="mt-1 text-center text-[10px] text-[#7a6a55]">将魂按顺序相邻即可激活武将 · 拖上战场列阵 · 征兵时池中棋子全部销毁</div>
       </div>
 
       {/* 拖拽幽灵 */}

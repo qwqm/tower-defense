@@ -209,13 +209,13 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
                       <div className="text-xs text-[#7a6a55]">定位：{d.role}</div>
                       <div className="mt-1 flex items-center gap-1 text-xs text-[#3b3229]">
                         将魂：{d.chars.map(c => <b key={c} className="rounded bg-[#8a2b1f]/10 px-1 text-[#8a2b1f]">{c}</b>)}
-                        <span className="text-[#7a6a55]">两字相邻即觉醒</span>
+                        <span className="text-[#7a6a55]">按顺序相邻即觉醒</span>
                       </div>
                       <div className="mt-1 text-xs text-[#8a2b1f]">【{d.skill}】{d.skillDesc}</div>
                       {d.passive && <div className="text-xs text-[#166534]">被动：{d.passive}</div>}
                       <div className="mt-0.5 text-[11px] text-[#7a6a55]">推荐站位：{d.advice}</div>
                     </>
-                  ) : <div className="text-xs text-[#6b5b45]">将魂：{d.chars.join(' + ')}（相邻摆放唤醒后解锁）</div>}
+                  ) : <div className="text-xs text-[#6b5b45]">将魂：{d.chars.join(' + ')}（按顺序相邻摆放后解锁）</div>}
                 </div>
               </div>
             </Card>

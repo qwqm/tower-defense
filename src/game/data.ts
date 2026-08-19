@@ -31,8 +31,8 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
   },
   qi: {
     key: 'qi', char: '骑', name: '骑兵', role: '三目标冲锋控制',
-    desc: '冲击射程内最靠前的三名敌军并令其短暂停步；五阶时攻速翻倍。',
-    dmg: 27.5, cd: 2.4, range: 4.0, attack: 'burst', color: '#7c2d12',
+    desc: '冲击射程内最靠前的三名敌军并令其短暂停步；攻速不随阶级变化。',
+    dmg: 27.5, cd: 2.4, range: 6.6, attack: 'burst', color: '#7c2d12',
   },
   gong: {
     key: 'gong', char: '弓', name: '弓兵', role: '远程持续',
@@ -129,11 +129,11 @@ export const HEROES: Record<HeroKey, HeroDef> = {
 export const HERO_KEYS: HeroKey[] = ['zhaoyun', 'guanyu', 'zhangfei', 'liubei', 'huangzhong', 'machao', 'lubu'];
 export const STAR_MUL = [1, 2.35, 5.4, 10.8, 21.6];
 
-/** 由两枚将魂字牌判定武将（赵云＝「赵」+「云」，相邻摆放觉醒） */
+/** 由两枚将魂字牌判定武将；字牌须按定义顺序相邻（赵在左、云在右）才会觉醒。 */
 export function heroForChars(c1: string, c2: string): HeroKey | null {
   for (const k of HERO_KEYS) {
     const [a, b] = HEROES[k].chars;
-    if ((c1 === a && c2 === b) || (c1 === b && c2 === a)) return k;
+    if (c1 === a && c2 === b) return k;
   }
   return null;
 }
