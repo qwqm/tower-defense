@@ -27,7 +27,7 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
   qiang: {
     key: 'qiang', char: '枪', name: '枪兵', role: '快速三目标范围',
     desc: '快速刺出枪芒，对目标及附近最多三名敌军造成范围伤害。',
-    dmg: 6.5, cd: 0.575, range: 4.8, attack: 'aoe', splash: 1.5, color: '#134e4a',
+    dmg: 6.5, cd: 8 / 21, range: 4.8, attack: 'aoe', splash: 1.5, color: '#134e4a',
   },
   qi: {
     key: 'qi', char: '骑', name: '骑兵', role: '三目标冲锋控制',
@@ -37,7 +37,7 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
   gong: {
     key: 'gong', char: '弓', name: '弓兵', role: '远程持续',
     desc: '射程最远，稳定输出，可覆盖远端道路。',
-    dmg: 5, cd: 0.68, range: 6.6, attack: 'single', color: '#3f3f46',
+    dmg: 5, cd: 8 / 21, range: 6.6, attack: 'single', color: '#3f3f46',
   },
 };
 
@@ -49,10 +49,11 @@ export const TIER_RANGE_BONUS = [0, 0.12, 0.36, 0.75, 1.3];
 export const TIER_ATTACK_SPEED: Record<TroopKey, number[]> = {
   // 刀兵：0.75/s → 0.9/s → 1.16/s → 1.54/s → 2/s
   dao: [1, 1.2, 1.55, 2.05, 8 / 3],
-  qiang: [1, 1.06, 1.18, 1.36, 1.65],
+  qiang: [1, 1.2, 1.55, 2.05, 8 / 3],
   qi: [1, 1, 1, 1, 1],
-  gong: [1, 1.06, 1.18, 1.36, 1.65],
+  gong: [1, 1.2, 1.55, 2.05, 8 / 3],
 };
+export const TROOP_RANGE_SCALE = 0.5;
 export const FRIENDLY_DAMAGE_SCALE = 0.425;
 export const FRIENDLY_ATTACK_INTERVAL_SCALE = 3.5;
 export const ENEMY_GOLD_DROP_SCALE = 0.5;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   TROOPS, TROOP_KEYS, HEROES, HERO_KEYS, ENEMIES, BOSSES, LEVELS, CHAPTERS,
-  buildWaves, newMods, BOONS, TIER_MUL, TIER_RANGE_BONUS, TIER_ATTACK_SPEED, STAR_MUL, FRIENDLY_DAMAGE_SCALE,
+  buildWaves, newMods, BOONS, TIER_MUL, TIER_RANGE_BONUS, TIER_ATTACK_SPEED, TROOP_RANGE_SCALE, STAR_MUL, FRIENDLY_DAMAGE_SCALE,
   FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, ENEMY_HP_SCALE,
   MAX_UNIT_LEVEL, heroForChars,
   type TroopKey, type HeroKey, type Mods, type Boon, type EnemyKey,
@@ -1082,7 +1082,7 @@ export class Game {
     return {
       dmg: d.dmg * FRIENDLY_DAMAGE_SCALE * mul * this.mods.atk * this.mods.troopAtk[u.key as TroopKey] * this.opts.perm.troopDmg * low * buff,
       cd: d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE / (this.mods.aspd * tierAttackSpeed),
-      range: d.range + this.mods.range[u.key as TroopKey] + TIER_RANGE_BONUS[u.lv - 1],
+      range: (d.range + this.mods.range[u.key as TroopKey] + TIER_RANGE_BONUS[u.lv - 1]) * TROOP_RANGE_SCALE,
       attack: d.attack, splash: (d.splash || 0) * (1 + this.mods.splashBonus),
       pierce: (d.pierce || 0) + this.mods.pierceBonus,
     };
@@ -1445,11 +1445,17 @@ export class Game {
 
   findTarget(x: number, y: number, range: number) {
     let best: Enemy | null = null, bd = Infinity;
+    let adouDistance = Infinity;
     for (const e of this.enemies) {
       const d = Math.hypot(e.x - x, e.y - y);
       if (d <= range) {
-        const score = d - (e.boss ? 0 : 0) - e.t * 0.02; // 略偏向靠前的敌人
-        if (score < bd) { bd = score; best = e; }
+        const toAdou = Math.hypot(e.x - ADOU_POS.x, e.y - ADOU_POS.y);
+        // 所有我方单位优先集火最接近阿斗的敌军；距离相同才按就近目标取舍。
+        if (toAdou < adouDistance - 0.001 || (Math.abs(toAdou - adouDistance) <= 0.001 && d < bd)) {
+          adouDistance = toAdou;
+          bd = d;
+          best = e;
+        }
       }
     }
     return best;
