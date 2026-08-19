@@ -3,7 +3,7 @@ import {
   CHAPTERS, LEVELS, TROOPS, TROOP_KEYS, HEROES, HERO_KEYS, ENEMIES, ENEMY_KEYS,
   BOSSES, BOSS_KEYS, UPGRADES, ACHIEVEMENTS, FRIENDLY_DAMAGE_SCALE,
   FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, ENEMY_HP_SCALE,
-  MAX_UNIT_LEVEL, rankOf, nextRank,
+  MAX_UNIT_LEVEL, TIER_MUL, TIER_RANGE_BONUS, TIER_ATTACK_SPEED, rankOf, nextRank,
 } from '../game/data';
 import type { SaveData } from '../game/save';
 import { totalStars, isLevelUnlocked } from '../game/save';
@@ -190,7 +190,7 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
                 <div className="min-w-0">
                   <div className="ink-title text-lg text-[#2c251d]">{ok ? d.name : '未解锁'} <span className="text-xs text-[#7a6a55]">{ok ? d.role : ''}</span></div>
                   <div className="text-xs text-[#6b5b45]">{ok ? d.desc : '在战斗中征募以解锁。'}</div>
-                  {ok && <div className="mt-1 text-[11px] text-[#7a6a55]">攻击 {Number((d.dmg * FRIENDLY_DAMAGE_SCALE).toFixed(2))} · 间隔 {Number((d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE).toFixed(2))}s · 射程 {d.range} · 五阶伤害倍率 24.8x{k === 'qi' ? ' · 五阶攻速 2x' : ''}</div>}
+                  {ok && <div className="mt-1 text-[11px] text-[#7a6a55]">攻击 {Number((d.dmg * FRIENDLY_DAMAGE_SCALE).toFixed(2))} · 间隔 {Number((d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE).toFixed(2))}s · 射程 {d.range} · 五阶伤害 {TIER_MUL[4]}x · 射程 +{TIER_RANGE_BONUS[4]}{k === 'qi' ? ' · 攻速固定' : ` · 攻速 +${Math.round((TIER_ATTACK_SPEED[k][4] - 1) * 100)}%`}</div>}
                 </div>
               </div>
             </Card>

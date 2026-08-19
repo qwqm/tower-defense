@@ -22,7 +22,7 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
   dao: {
     key: 'dao', char: '刀', name: '刀兵', role: '单体高伤',
     desc: '挥刀点斩，单体伤害极高，克制精锐重甲。',
-    dmg: 13, cd: 0.575, range: 3.4, attack: 'single', color: '#1f2937',
+    dmg: 13, cd: 8 / 21, range: 3.4, attack: 'single', color: '#1f2937',
   },
   qiang: {
     key: 'qiang', char: '枪', name: '枪兵', role: '快速三目标范围',
@@ -43,7 +43,16 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
 
 export const TROOP_KEYS: TroopKey[] = ['dao', 'qiang', 'qi', 'gong'];
 export const MAX_UNIT_LEVEL = 5;
-export const TIER_MUL = [1, 2.5, 6.2, 12.4, 24.8];
+/** 兵种升阶曲线：每一级的增益均比前一级更明显。 */
+export const TIER_MUL = [1, 1.35, 1.95, 2.85, 4.25];
+export const TIER_RANGE_BONUS = [0, 0.12, 0.36, 0.75, 1.3];
+export const TIER_ATTACK_SPEED: Record<TroopKey, number[]> = {
+  // 刀兵：0.75/s → 0.9/s → 1.16/s → 1.54/s → 2/s
+  dao: [1, 1.2, 1.55, 2.05, 8 / 3],
+  qiang: [1, 1.06, 1.18, 1.36, 1.65],
+  qi: [1, 1, 1, 1, 1],
+  gong: [1, 1.06, 1.18, 1.36, 1.65],
+};
 export const FRIENDLY_DAMAGE_SCALE = 0.425;
 export const FRIENDLY_ATTACK_INTERVAL_SCALE = 3.5;
 export const ENEMY_GOLD_DROP_SCALE = 0.5;

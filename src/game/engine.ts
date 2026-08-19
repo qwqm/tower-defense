@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   TROOPS, TROOP_KEYS, HEROES, HERO_KEYS, ENEMIES, BOSSES, LEVELS, CHAPTERS,
-  buildWaves, newMods, BOONS, TIER_MUL, STAR_MUL, FRIENDLY_DAMAGE_SCALE,
+  buildWaves, newMods, BOONS, TIER_MUL, TIER_RANGE_BONUS, TIER_ATTACK_SPEED, STAR_MUL, FRIENDLY_DAMAGE_SCALE,
   FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, ENEMY_HP_SCALE,
   MAX_UNIT_LEVEL, heroForChars,
   type TroopKey, type HeroKey, type Mods, type Boon, type EnemyKey,
@@ -12,7 +12,7 @@ import { FxEngine } from './fx';
 // ---------- 经典塔防地图 ----------
 // 5列 × 9行 瓦片地图，敌军沿蛇形道路行进，道路之间的空地为可布阵地块
 const T = 1.32;                       // 瓦片边长
-const HERO_TOKEN_CHANCE = 0.08;
+const HERO_TOKEN_CHANCE = 0.15;
 const ENEMY_SPAWN_INTERVAL_SCALE = 2.25;
 const ENEMY_GROUP_DELAY_SCALE = 1.5;
 const WAVE_BREAK_DURATION = 8;
@@ -1077,11 +1077,12 @@ export class Game {
     }
     const d = TROOPS[u.key as TroopKey];
     const mul = TIER_MUL[u.lv - 1];
-    const tierAttackSpeed = u.key === 'qi' && u.lv === MAX_UNIT_LEVEL ? 2 : 1;
+    // 骑兵以冲锋节奏作战，升阶不改变攻速；其余兵种攻速逐级加快。
+    const tierAttackSpeed = TIER_ATTACK_SPEED[u.key as TroopKey][u.lv - 1];
     return {
       dmg: d.dmg * FRIENDLY_DAMAGE_SCALE * mul * this.mods.atk * this.mods.troopAtk[u.key as TroopKey] * this.opts.perm.troopDmg * low * buff,
       cd: d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE / (this.mods.aspd * tierAttackSpeed),
-      range: d.range + this.mods.range[u.key as TroopKey] + (u.lv - 1) * 0.32,
+      range: d.range + this.mods.range[u.key as TroopKey] + TIER_RANGE_BONUS[u.lv - 1],
       attack: d.attack, splash: (d.splash || 0) * (1 + this.mods.splashBonus),
       pierce: (d.pierce || 0) + this.mods.pierceBonus,
     };
