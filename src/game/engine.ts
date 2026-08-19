@@ -12,7 +12,7 @@ import { FxEngine } from './fx';
 // ---------- 经典塔防地图 ----------
 // 5列 × 9行 瓦片地图，敌军沿蛇形道路行进，道路之间的空地为可布阵地块
 const T = 1.32;                       // 瓦片边长
-const HERO_TOKEN_CHANCE = 0.05;
+const HERO_TOKEN_CHANCE = 0.08;
 const ENEMY_SPAWN_INTERVAL_SCALE = 2.25;
 const ENEMY_GROUP_DELAY_SCALE = 1.5;
 const WAVE_BREAK_DURATION = 8;
@@ -285,7 +285,7 @@ interface Enemy {
   hp: number; maxHp: number; shield: number; t: number; speed: number;
   lives: number; gold: number; elite: boolean; dr: number;
   aura: boolean; ccImmuneOnce: boolean; ccUsed: boolean;
-  slowT: number; slowMul: number; stun: number; burn: number; burnDmg: number;
+  slowT: number; slowMul: number; stun: number; fearT: number; burn: number; burnDmg: number;
   x: number; y: number; size: number;
   mesh: THREE.Mesh; bar: THREE.Mesh; barBg: THREE.Mesh;
   rage: boolean; mechT: number; chargeT: number; killer: string; flashT?: number;
@@ -293,6 +293,7 @@ interface Enemy {
 interface Effect {
   mesh: THREE.Mesh; life: number; max: number; kind: string;
   vx?: number; vy?: number; s0?: number; s1?: number; rot?: number;
+  target?: Enemy;
 }
 export interface Snapshot {
   gold: number; wave: number; waves: number; adouHp: number; adouMax: number;
@@ -1116,7 +1117,7 @@ export class Game {
       speed: def.speed * (boss ? 1 : this.level.spdMul) * PATH_SPEED_SCALE,
       lives: def.lives, gold: def.gold, elite: !!def.elite || boss, dr: def.dr || 0,
       aura: !!def.aura, ccImmuneOnce: !!def.ccImmuneOnce, ccUsed: false,
-      slowT: 0, slowMul: 1, stun: 0, burn: 0, burnDmg: 0,
+      slowT: 0, slowMul: 1, stun: 0, fearT: 0, burn: 0, burnDmg: 0,
       x: PATH[0][0], y: PATH[0][1], size, mesh, bar, barBg,
       rage: false, mechT: 8, chargeT: 0, killer: '', flashT: 0,
     };
@@ -1301,6 +1302,7 @@ export class Game {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
       if (e.stun > 0) { e.stun -= dt; }
+      if (e.fearT > 0) { e.fearT -= dt; }
       if (e.slowT > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slowMul = 1; }
       if (e.burn > 0) {
         e.burn -= dt;
@@ -1310,9 +1312,11 @@ export class Game {
       // Boss 机制
       if (e.boss) this.bossMech(e, dt);
       let sp = e.speed * e.slowMul;
-      if (e.chargeT > 0) { sp *= 3.5; e.chargeT -= dt; }
+      if (e.chargeT > 0) { e.chargeT -= dt; if (e.fearT <= 0) sp *= 3.5; }
       if (e.stun > 0) sp = 0;
-      e.t += sp * dt;
+      // 恐惧：敌军掉头后撤，移动速度降低80%。
+      if (e.fearT > 0) e.t = Math.max(0, e.t - e.speed * 0.2 * dt);
+      else e.t += sp * dt;
       const p = pathPoint(e.t);
       e.x = p.x; e.y = p.y;
       e.mesh.position.set(p.x, p.y, 0.4);
@@ -1320,9 +1324,10 @@ export class Game {
       e.bar.scale.x = ratio;
       e.bar.position.set(p.x - (e.size * 0.9 * (1 - ratio)) / 2, p.y + e.size * 0.62, 0.55);
       e.barBg.position.set(p.x, p.y + e.size * 0.62, 0.5);
-      const hurt = e.stun > 0 ? 0.5 : 1;
+      const hurt = e.stun > 0 ? 0.5 : e.fearT > 0 ? 0.72 : 1;
       (e.mesh.material as THREE.MeshBasicMaterial).opacity = hurt;
       (e.mesh.material as THREE.MeshBasicMaterial).transparent = true;
+      e.mesh.rotation.z = e.fearT > 0 ? Math.sin(this.time * 22 + e.id) * 0.13 : 0;
       if (e.t >= endT) {
         this.adouHp -= e.lives;
         sfx('damage'); this.shake(0.25, 0.2); vibrate(30, this.opts.vibrate);
@@ -1611,11 +1616,52 @@ export class Game {
         void killed;
         break;
       }
+      case 'lubu': {
+        const marked = this.findNearestToAdou();
+        if (!marked) break;
+        this.showLubuMarker(marked);
+        setTimeout(() => {
+          if (this.destroyed || this.ended) return;
+          // 若预警目标已被击败，重新锁定当前最接近阿斗的敌军。
+          const target = this.enemies.includes(marked) ? marked : this.findNearestToAdou();
+          if (!target) return;
+          const radius = 2.15;
+          this.fx.lubuLeap(p.x, p.y, target.x, target.y, radius);
+          for (const e of [...this.enemies]) {
+            if (Math.hypot(e.x - target.x, e.y - target.y) > radius) continue;
+            this.damage(e, st.dmg * 3.6, u);
+            if (e.hp > 0) this.applyFear(e, 2);
+          }
+          this.shake(0.5, 0.38);
+        }, 1000);
+        break;
+      }
     }
+  }
+  /** 找出与阿斗直线距离最近的仍存活敌军。 */
+  findNearestToAdou() {
+    let best: Enemy | null = null;
+    let distance = Infinity;
+    for (const e of this.enemies) {
+      const d = Math.hypot(e.x - ADOU_POS.x, e.y - ADOU_POS.y);
+      if (d < distance) { best = e; distance = d; }
+    }
+    return best;
+  }
+  /** 吕布跃击前的红色落点预警圈，持续并跟随目标1秒。 */
+  showLubuMarker(target: Enemy) {
+    const marker = this.getEff(new THREE.RingGeometry(0.86, 1.04, 48), '#ef4444', 0.82);
+    marker.position.set(target.x, target.y, 1.15);
+    this.effects.push({ mesh: marker, life: 1, max: 1, kind: 'marker', target });
+    this.fx.glow(target.x, target.y, 1.5, '#ef4444', 0.3, 0.55);
   }
   applyStun(e: Enemy, t: number) {
     if (e.ccImmuneOnce && !e.ccUsed) { e.ccUsed = true; this.dmgText(e.x, e.y + 0.4, 0, false); return; }
     e.stun = Math.max(e.stun, t * this.mods.ccMul);
+  }
+  applyFear(e: Enemy, t: number) {
+    if (e.ccImmuneOnce && !e.ccUsed) { e.ccUsed = true; this.dmgText(e.x, e.y + 0.4, 0, false); return; }
+    e.fearT = Math.max(e.fearT, t * this.mods.ccMul);
   }
 
   updateEffects(dt: number) {
@@ -1625,7 +1671,16 @@ export class Game {
       const k = Math.max(0, f.life / f.max);
       const mat = f.mesh.material as THREE.MeshBasicMaterial;
       
-      if (f.kind === 'ring') {
+      if (f.kind === 'marker') {
+        if (!f.target || !this.enemies.includes(f.target)) {
+          f.life = 0;
+        } else {
+          f.mesh.position.set(f.target.x, f.target.y, 1.15);
+          const pulse = 1 + Math.sin((1 - k) * Math.PI * 8) * 0.1;
+          f.mesh.scale.setScalar(pulse);
+          mat.opacity = 0.5 + (1 - k) * 0.32;
+        }
+      } else if (f.kind === 'ring') {
         const s = (f.s0! + (f.s1! - f.s0!) * (1 - k));
         f.mesh.scale.set(s, s, 1);
         mat.opacity = k * 0.8;

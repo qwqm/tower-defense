@@ -461,6 +461,20 @@ export class FxEngine {
     this.glow(x2, y2, 0.8, '#fbcfe8', 0.22, 0.8);
   }
 
+  /** 吕布：锁定后从阵位跃击至目标 */
+  lubuLeap(x1: number, y1: number, x2: number, y2: number, r: number) {
+    this.streak(x1, y1, x2, y2, '#f59e0b', 0.32, 0.24, 0.95);
+    this.streak(x1, y1, x2, y2, '#fff7d6', 0.11, 0.3, 1);
+    this.ring(x2, y2, r, '#ef4444', 0.48, 0.9, 1.8);
+    this.ring(x2, y2, r * 0.58, '#fbbf24', 0.36, 0.8, 2.2);
+    this.burst(x2, y2, '#ef4444', 22, 5.4, 0.22, 0.58);
+    this.burst(x2, y2, '#fef3c7', 10, 3.2, 0.14, 0.4);
+    this.cloud(x2, y2, '#321711', 12, r * 0.9, 1.05);
+    this.blot(x2, y2, r * 1.2, '#2a1510', 1.1, 0.48);
+    this.hooks.punch?.(0.16);
+    this.hooks.shake?.(0.42, 0.35);
+  }
+
   // ---------- 事件特效 ----------
 
   /** 合成爆发 */

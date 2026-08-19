@@ -1,7 +1,7 @@
 // ===== 《长坂护主》核心数据 =====
 
 export type TroopKey = 'dao' | 'qiang' | 'qi' | 'gong';
-export type HeroKey = 'zhaoyun' | 'guanyu' | 'zhangfei' | 'liubei' | 'huangzhong' | 'machao';
+export type HeroKey = 'zhaoyun' | 'guanyu' | 'zhangfei' | 'liubei' | 'huangzhong' | 'machao' | 'lubu';
 
 export interface TroopDef {
   key: TroopKey;
@@ -108,9 +108,15 @@ export const HEROES: Record<HeroKey, HeroDef> = {
     skill: '西凉突阵', skillDesc: '疾驰连击道路上的12名敌人；每击杀一人缩短下次技能1秒。',
     skillCd: 11, advice: '中部地块，可连击贯穿多条车道上的敌军。', color: '#9d174d',
   },
+  lubu: {
+    key: 'lubu', char: '吕', name: '吕布', role: '跃击范围控制',
+    chars: ['吕', '布'], dmg: 34, cd: 1.6, range: 4.8, attack: 'aoe', splash: 1.65,
+    skill: '无双震慑', skillDesc: '锁定最靠近阿斗的敌军，预警1秒后跃击落点，造成范围伤害并恐惧敌军2秒。恐惧时敌军反向移动，移速降低80%。',
+    skillCd: 20, advice: '靠近道路中段布阵，普攻与跃击都能覆盖更多敌军。', color: '#991b1b',
+  },
 };
 
-export const HERO_KEYS: HeroKey[] = ['zhaoyun', 'guanyu', 'zhangfei', 'liubei', 'huangzhong', 'machao'];
+export const HERO_KEYS: HeroKey[] = ['zhaoyun', 'guanyu', 'zhangfei', 'liubei', 'huangzhong', 'machao', 'lubu'];
 export const STAR_MUL = [1, 2.35, 5.4, 10.8, 21.6];
 
 /** 由两枚将魂字牌判定武将（赵云＝「赵」+「云」，相邻摆放觉醒） */
