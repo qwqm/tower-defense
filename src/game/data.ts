@@ -43,6 +43,9 @@ export const TROOPS: Record<TroopKey, TroopDef> = {
 
 export const TROOP_KEYS: TroopKey[] = ['dao', 'qiang', 'qi', 'gong'];
 export const TIER_MUL = [1, 2.5, 6.2];
+export const FRIENDLY_DAMAGE_SCALE = 0.85;
+export const FRIENDLY_ATTACK_INTERVAL_SCALE = 3.5;
+export const ENEMY_GOLD_DROP_SCALE = 0.5;
 
 export interface HeroDef {
   key: HeroKey;

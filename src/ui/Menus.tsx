@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import {
   CHAPTERS, LEVELS, TROOPS, TROOP_KEYS, HEROES, HERO_KEYS, ENEMIES, ENEMY_KEYS,
-  BOSSES, BOSS_KEYS, UPGRADES, ACHIEVEMENTS, rankOf, nextRank,
+  BOSSES, BOSS_KEYS, UPGRADES, ACHIEVEMENTS, FRIENDLY_DAMAGE_SCALE,
+  FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, rankOf, nextRank,
 } from '../game/data';
 import type { SaveData } from '../game/save';
 import { totalStars, isLevelUnlocked } from '../game/save';
@@ -13,6 +14,9 @@ export function Home({ save, go }: { save: SaveData; go: (s: string) => void }) 
   const stars = totalStars(save);
   const rank = rankOf(stars);
   const nx = nextRank(stars);
+  const rankProgress = nx
+    ? Math.min(100, ((stars - rank.stars) / (nx.stars - rank.stars)) * 100)
+    : 100;
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-[#f0e7d2]">
       <div className="ink-bg pointer-events-none absolute inset-0" />
@@ -45,7 +49,7 @@ export function Home({ save, go }: { save: SaveData; go: (s: string) => void }) 
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#3b3229]/10">
             <div className="h-full rounded-full bg-[#a8761f]"
-              style={{ width: `${nx ? Math.min(100, (stars / nx.stars) * 100) : 100}%` }} />
+              style={{ width: `${rankProgress}%` }} />
           </div>
           <div className="mt-1 text-[11px] text-[#7a6a55]">
             ★ {stars} / 72 {nx ? `· 距【${nx.name}】还需 ${nx.stars - stars} 星` : '· 已达最高军衔'}
@@ -185,7 +189,7 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
                 <div className="min-w-0">
                   <div className="ink-title text-lg text-[#2c251d]">{ok ? d.name : '未解锁'} <span className="text-xs text-[#7a6a55]">{ok ? d.role : ''}</span></div>
                   <div className="text-xs text-[#6b5b45]">{ok ? d.desc : '在战斗中征募以解锁。'}</div>
-                  {ok && <div className="mt-1 text-[11px] text-[#7a6a55]">攻击 {d.dmg} · 间隔 {d.cd}s · 射程 {d.range} · 三阶伤害倍率 6.2x</div>}
+                  {ok && <div className="mt-1 text-[11px] text-[#7a6a55]">攻击 {Number((d.dmg * FRIENDLY_DAMAGE_SCALE).toFixed(2))} · 间隔 {Number((d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE).toFixed(2))}s · 射程 {d.range} · 三阶伤害倍率 6.2x</div>}
                 </div>
               </div>
             </Card>
@@ -225,7 +229,7 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
                 <div>
                   <div className="ink-title text-lg text-[#2c251d]">{ok ? d.name : '未遭遇'}</div>
                   <div className="text-xs text-[#6b5b45]">{ok ? d.desc : '在战场上遭遇后解锁。'}</div>
-                  {ok && <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {d.hp} · 速度 {d.speed} · 突破损失 {d.lives} 生命 · 军粮 {d.gold}</div>}
+                  {ok && <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {d.hp} · 速度 {d.speed} · 突破损失 {d.lives} 生命 · 军粮 {Number((d.gold * ENEMY_GOLD_DROP_SCALE).toFixed(1))}</div>}
                 </div>
               </div>
             </Card>
@@ -240,7 +244,7 @@ export function Codex({ save, onBack }: { save: SaveData; onBack: () => void }) 
                 <div>
                   <div className="ink-title text-lg text-[#8a2b1f]">{ok ? d.name : '未知强敌'}</div>
                   {ok && <div className="text-xs text-[#3b3229]">【{d.mech}】{d.desc}</div>}
-                  {ok ? <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {d.hp} · 突破损失 {d.lives} 生命</div>
+                  {ok ? <div className="mt-0.5 text-[11px] text-[#7a6a55]">基础生命 {d.hp} · 突破损失 {d.lives} 生命 · 军粮 {Number((d.gold * ENEMY_GOLD_DROP_SCALE).toFixed(1))}</div>
                     : <div className="text-xs text-[#6b5b45]">击败或遭遇后解锁。</div>}
                 </div>
               </div>

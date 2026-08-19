@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import {
   TROOPS, TROOP_KEYS, HEROES, HERO_KEYS, ENEMIES, BOSSES, LEVELS, CHAPTERS,
-  buildWaves, newMods, BOONS, TIER_MUL, STAR_MUL, heroForChars,
+  buildWaves, newMods, BOONS, TIER_MUL, STAR_MUL, FRIENDLY_DAMAGE_SCALE,
+  FRIENDLY_ATTACK_INTERVAL_SCALE, ENEMY_GOLD_DROP_SCALE, heroForChars,
   type TroopKey, type HeroKey, type Mods, type Boon, type EnemyKey,
 } from './data';
 import { sfx, vibrate } from './audio';
@@ -11,6 +12,9 @@ import { FxEngine } from './fx';
 // 5列 × 9行 瓦片地图，敌军沿蛇形道路行进，道路之间的空地为可布阵地块
 const T = 1.32;                       // 瓦片边长
 const HERO_TOKEN_CHANCE = 0.05;
+const ENEMY_SPAWN_INTERVAL_SCALE = 2.25;
+const ENEMY_GROUP_DELAY_SCALE = 1.5;
+const WAVE_BREAK_DURATION = 4.5;
 const GRID_C = 5, GRID_R = 9;
 const GRID_TOP = 5.4;
 const colX = (c: number) => (c - (GRID_C - 1) / 2) * T;
@@ -45,7 +49,7 @@ const PATH: [number, number][] = [
 ];
 export const ADOU_POS = { x: colX(0), y: rowY(8) - T * 0.95 };
 export const CAM_CENTER_Y = (rowY(0) + T * 1.2 + ADOU_POS.y - T * 0.7) / 2;
-const PATH_SPEED_SCALE = 0.95;
+const PATH_SPEED_SCALE = 0.7;
 
 function cellPos(cell: number) {
   const b = BUILD[cell];
@@ -338,7 +342,7 @@ export class Game {
   adouHp = 20; adouMax = 20;
   wave = 0; waveDefs: ReturnType<typeof buildWaves> = [];
   spawnQueue: { key: EnemyKey; at: number }[] = [];
-  waveTimer = 0; inBreak = true; breakTime = 3; running = true;
+  waveTimer = 0; inBreak = true; breakTime = WAVE_BREAK_DURATION; running = true;
   mods: Mods = newMods();
   boons: Record<string, number> = {};
   time = 0; speed = 1; paused = false; ended = false; revived = false;
@@ -1056,8 +1060,8 @@ export class Game {
       const d = HEROES[u.key as HeroKey];
       const mul = STAR_MUL[u.lv - 1];
       return {
-        dmg: d.dmg * mul * this.mods.atk * this.mods.heroAtk * this.opts.perm.heroDmg * low * buff,
-        cd: d.cd / (this.mods.aspd * this.mods.heroAspd),
+        dmg: d.dmg * FRIENDLY_DAMAGE_SCALE * mul * this.mods.atk * this.mods.heroAtk * this.opts.perm.heroDmg * low * buff,
+        cd: d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE / (this.mods.aspd * this.mods.heroAspd),
         range: d.range, attack: d.attack, splash: (d.splash || 0) * (1 + this.mods.splashBonus),
         pierce: (d.pierce || 0) + this.mods.pierceBonus,
       };
@@ -1072,8 +1076,8 @@ export class Game {
     const d = TROOPS[u.key as TroopKey];
     const mul = TIER_MUL[u.lv - 1];
     return {
-      dmg: d.dmg * mul * this.mods.atk * this.mods.troopAtk[u.key as TroopKey] * this.opts.perm.troopDmg * low * buff,
-      cd: d.cd / this.mods.aspd,
+      dmg: d.dmg * FRIENDLY_DAMAGE_SCALE * mul * this.mods.atk * this.mods.troopAtk[u.key as TroopKey] * this.opts.perm.troopDmg * low * buff,
+      cd: d.cd * FRIENDLY_ATTACK_INTERVAL_SCALE / this.mods.aspd,
       range: d.range + this.mods.range[u.key as TroopKey] + (u.lv - 1) * 0.32,
       attack: d.attack, splash: (d.splash || 0) * (1 + this.mods.splashBonus),
       pierce: (d.pierce || 0) + this.mods.pierceBonus,
@@ -1125,7 +1129,7 @@ export class Game {
   }
   killEnemy(e: Enemy, by: string) {
     this.kills++;
-    this.gold += Math.round(e.gold * this.mods.goldKillMul);
+    this.gold += e.gold * this.mods.goldKillMul * ENEMY_GOLD_DROP_SCALE;
     this.fx.enemyDie(e.x, e.y, e.boss);
     this.ring(e.x, e.y, e.boss ? 4 : 1.2, e.boss ? '#dc2626' : '#7f1d1d', e.boss ? 0.8 : 0.28);
     if (e.boss) {
@@ -1227,17 +1231,11 @@ export class Game {
       this.spawnEnemy(s.key);
     }
     if (this.spawnQueue.length === 0) {
-      const bossWave = this.wave === this.level.waves && this.level.boss;
       if (this.enemies.length === 0) {
         // 波次完成
         if (this.wave >= this.level.waves) { this.finish(true); return; }
         this.gold += 10 + this.wave * 4 + this.mods.waveGold;
-        this.inBreak = true; this.breakTime = 3.2;
-        if (this.boonWaves.has(this.wave)) this.offerBoons();
-      } else if (!bossWave && this.enemies.length <= 2 && this.waveTimer > 8 && this.wave < this.level.waves) {
-        // 提前进入下一波，保持节奏
-        this.gold += 10 + this.wave * 4 + this.mods.waveGold;
-        this.inBreak = true; this.breakTime = 2.0;
+        this.inBreak = true; this.breakTime = WAVE_BREAK_DURATION;
         if (this.boonWaves.has(this.wave)) this.offerBoons();
       }
     }
@@ -1248,13 +1246,19 @@ export class Game {
     this.waveTimer = 0;
     this.spawnQueue = [];
     if (this.wave === this.level.waves && this.level.boss) {
-      this.spawnQueue.push({ key: 'BOSS' as any, at: 1.2 });
+      this.spawnQueue.push({ key: 'BOSS' as any, at: 1.2 * ENEMY_GROUP_DELAY_SCALE });
       const escort: EnemyKey[] = ['dunzu', 'buzu', 'buzu', 'jiashi', 'qingqi', 'qingqi'];
-      escort.forEach((k, i) => this.spawnQueue.push({ key: k, at: 3 + i * 1.5 }));
+      escort.forEach((k, i) => this.spawnQueue.push({
+        key: k,
+        at: 3 * ENEMY_GROUP_DELAY_SCALE + i * 1.5 * ENEMY_SPAWN_INTERVAL_SCALE,
+      }));
     } else {
       const def = this.waveDefs[Math.min(this.wave - 1, this.waveDefs.length - 1)];
       for (const en of def) {
-        for (let i = 0; i < en.count; i++) this.spawnQueue.push({ key: en.key, at: en.delay + i * en.interval });
+        for (let i = 0; i < en.count; i++) this.spawnQueue.push({
+          key: en.key,
+          at: en.delay * ENEMY_GROUP_DELAY_SCALE + i * en.interval * ENEMY_SPAWN_INTERVAL_SCALE,
+        });
       }
       this.spawnQueue.sort((a, b) => a.at - b.at);
     }
