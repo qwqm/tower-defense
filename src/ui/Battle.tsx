@@ -41,6 +41,7 @@ export function Battle(p: Props) {
   const [boons, setBoons] = useState<{ id: string; name: string; desc: string; tag: string }[] | null>(null);
   const [hero, setHero] = useState<{ char: string; name: string; skill: string; star: number; up: boolean } | null>(null);
   const [boss, setBoss] = useState<{ name: string; char: string; mech: string; desc: string } | null>(null);
+  const [cast, setCast] = useState<{ char: string; name: string; skill: string; color: string } | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; sub?: string }[]>([]);
   const [result, setResult] = useState<{ res: EndResult; rw: Reward } | null>(null);
   const [dead, setDead] = useState<EndResult | null>(null);
@@ -76,8 +77,15 @@ export function Battle(p: Props) {
         } else if (type === 'bossIntro') {
           setBoss(payload);
           setTimeout(() => setBoss(null), 2200);
-        } else if (type === 'bossSkill') toast(payload.name, payload.desc);
-        else if (type === 'skill') toast(`${payload.name} · ${payload.skill}`);
+        } else if (type === 'bossSkill') {
+          setCast({ char: payload.char ?? '敌', name: payload.name, skill: payload.desc, color: payload.color ?? '#ef4444' });
+          setTimeout(() => setCast(null), 1500);
+          toast(payload.name, payload.desc);
+        } else if (type === 'skill') {
+          setCast({ char: payload.char ?? '将', name: payload.name, skill: payload.skill, color: payload.color ?? '#d8a94a' });
+          setTimeout(() => setCast(null), 1500);
+          toast(`${payload.name} · ${payload.skill}`);
+        }
         else if (type === 'toast') toast(payload.text);
         else if (type === 'fire') toast('战场火势燃起！', '道路上的敌军持续受到灼烧');
         else if (type === 'wave') { if (payload.wave > 1) toast(`第 ${payload.wave} 波`); }
@@ -356,6 +364,19 @@ export function Battle(p: Props) {
           <div className="boss-in ink-title text-[150px] leading-none text-[#ff6b52] drop-shadow-[0_0_36px_rgba(255,60,20,0.9)]">{boss.char}</div>
           <div className="anim-pop ink-title text-4xl text-[#ffe1d5]">{boss.name}</div>
           <div className="ink-scan anim-pop mt-2 rounded-full border border-[#ff6b52]/60 bg-[#2b1a17]/35 px-4 py-1 text-sm text-[#ffb9a5]">【{boss.mech}】{boss.desc}</div>
+        </div>
+      )}
+
+      {/* 施法广播：角色字印 + 技能名 + 指向箭头，与画布上的源点签名同步。 */}
+      {cast && (
+        <div className="battle-cast-banner pointer-events-none absolute left-1/2 top-16 z-30 flex w-[min(92%,360px)] -translate-x-1/2 items-center gap-2.5 rounded-2xl border px-2.5 py-2" style={{ '--cast-color': cast.color } as CSSProperties}>
+          <div className="battle-cast-source ink-title flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-2xl" style={{ color: cast.color }}>{cast.char}</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] font-bold tracking-[0.24em]" style={{ color: cast.color }}>SIGNATURE CAST · 定向施法</div>
+            <div className="truncate text-sm font-bold text-[#fff3d6]">{cast.name}</div>
+            <div className="truncate text-[10px] text-[#e7d4b6]">{cast.skill}</div>
+          </div>
+          <div className="battle-cast-arrow text-xl" style={{ color: cast.color }}>↠</div>
         </div>
       )}
 

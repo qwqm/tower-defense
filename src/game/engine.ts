@@ -1236,6 +1236,8 @@ export class Game {
       e.shield -= abs; d -= abs;
     }
     e.hp -= d;
+    const hitColor = src?.hero ? HEROES[src.key as HeroKey].color : src?.kind === 'troop' ? TROOPS[src.key as TroopKey].color : '#f59e0b';
+    this.fx.hitSpark(e.x, e.y, hitColor, crit);
     if (!opts.noText) this.dmgText(e.x, e.y, d, crit);
     if (crit) this.hitSound(true); else if (Math.random() < 0.35) this.hitSound(false);
     if (e.hp <= 0) {
@@ -1418,23 +1420,23 @@ export class Game {
     if (key === 'xiahoudun') {
       if (!e.rage && e.hp / e.maxHp < 0.5) {
         e.rage = true;
-        this.opts.onEvent('bossSkill', { name: '拔矢啖睛', desc: '夏侯惇狂化，获得35%减伤！' });
-        this.fx.bossSkill(e.x, e.y, key);
+        this.opts.onEvent('bossSkill', { name: '拔矢啖睛', desc: '夏侯惇狂化，获得35%减伤！', char: e.char, color: '#ef4444' });
+        this.fx.bossSkill(e.x, e.y, key, ADOU_POS.x, ADOU_POS.y);
         this.ring(e.x, e.y, 3, '#dc2626', 0.6); this.shake(0.3, 0.3);
       }
     } else if (key === 'caoren') {
       if (e.mechT <= 0) {
         e.mechT = 11;
         e.shield += e.maxHp * 0.12;
-        this.opts.onEvent('bossSkill', { name: '铁壁', desc: '曹仁获得护盾！' });
-        this.fx.bossSkill(e.x, e.y, key);
+        this.opts.onEvent('bossSkill', { name: '铁壁', desc: '曹仁获得护盾！', char: e.char, color: '#34d399' });
+        this.fx.bossSkill(e.x, e.y, key, ADOU_POS.x, ADOU_POS.y);
         this.ring(e.x, e.y, 2.6, '#10b981', 0.5);
       }
     } else if (key === 'zhangliao') {
       if (e.mechT <= 0) {
         e.mechT = 12; e.chargeT = 2.5;
-        this.opts.onEvent('bossSkill', { name: '突阵冲锋', desc: '张辽向终点疾冲！' });
-        this.fx.bossSkill(e.x, e.y, key);
+        this.opts.onEvent('bossSkill', { name: '突阵冲锋', desc: '张辽向终点疾冲！', char: e.char, color: '#60a5fa' });
+        this.fx.bossSkill(e.x, e.y, key, ADOU_POS.x, ADOU_POS.y);
         this.ring(e.x, e.y, 2.6, '#3b82f6', 0.5); this.shake(0.3, 0.3);
       }
     } else if (key === 'xuchu') {
@@ -1442,8 +1444,8 @@ export class Game {
         e.mechT = 13;
         const pool = [...this.units].sort(() => Math.random() - 0.5).slice(0, 4);
         pool.forEach(u => { u.stun = 3; const pp = this.unitPos(u); this.ring(pp.x, pp.y, 1.2, '#a16207', 0.4); });
-        this.opts.onEvent('bossSkill', { name: '虎痴怒吼', desc: '许褚震慑了部分己方单位！' });
-        this.fx.bossSkill(e.x, e.y, key);
+        this.opts.onEvent('bossSkill', { name: '虎痴怒吼', desc: '许褚震慑了部分己方单位！', char: e.char, color: '#f59e0b' });
+        this.fx.bossSkill(e.x, e.y, key, ADOU_POS.x, ADOU_POS.y);
         this.shake(0.4, 0.4);
       }
     }
@@ -1540,11 +1542,13 @@ export class Game {
 
   attack(u: Unit, st: ReturnType<Game['statsOf']>, target: Enemy, p: { x: number; y: number }) {
     const color = u.hero ? HEROES[u.key as HeroKey].color : TROOPS[u.key as TroopKey].color;
+    if (!u.hero && u.key === 'dao') {
+      this.fx.daoAttack(p.x, p.y, target.x, target.y, color);
+      this.damage(target, st.dmg, u);
+      return;
+    }
     if (!u.hero && u.key === 'qiang') {
-      let dx = target.x - p.x, dy = target.y - p.y;
-      const length = Math.hypot(dx, dy) || 1;
-      dx /= length; dy /= length;
-      this.fx.qiangPierce(p.x, p.y, dx, dy, length, color);
+      this.fx.qiangAttack(p.x, p.y, target.x, target.y, color);
       this.fx.ring(target.x, target.y, st.splash, color, 0.28, 0.6, 1.35);
       const areaTargets = [
         target,
@@ -1561,13 +1565,9 @@ export class Game {
         .sort((a, b) => b.t - a.t)
         .slice(0, 3);
       for (const e of chargeTargets) {
-        this.fx.machaoDash(p.x, p.y, e.x, e.y, color);
+        this.fx.cavalryCharge(p.x, p.y, e.x, e.y, color);
         this.damage(e, st.dmg, u);
         if (e.hp > 0) this.applyStun(e, e.boss ? 0.25 : 0.5);
-      }
-      if (chargeTargets.length > 0) {
-        const lead = chargeTargets[0];
-        this.fx.qiImpact(lead.x, lead.y, color);
       }
       return;
     }
@@ -1596,12 +1596,12 @@ export class Game {
         break;
       }
       case 'burst': {
-        this.fx.qiImpact(target.x, target.y, color);
+        this.fx.qiImpact(target.x, target.y, color, p.x, p.y);
         this.damage(target, st.dmg, u);
         break;
       }
       default: {
-        this.fx.gongShot(p.x, p.y, target.x, target.y, color);
+        this.fx.gongShot(p.x, p.y, target.x, target.y, color, u.hero ? HEROES[u.key as HeroKey].char : '弓');
         this.proj.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, t: 0, dur: 0.18, dmg: st.dmg, src: u, target, color });
       }
     }
@@ -1615,6 +1615,8 @@ export class Game {
     sfx('skill');
     this.shake(0.22, 0.25);
     this.opts.onEvent('skill', { name: d.name, skill: d.skill, char: d.char, color: d.color });
+    // 先落下施法者签名，再展开方向性轨迹；颜色与字印始终绑定释放者。
+    this.fx.sourceMark(p.x, p.y, d.color, d.char, 1.35);
     switch (u.key) {
       case 'zhaoyun': {
         for (let i = 0; i < 7; i++) {
@@ -1637,7 +1639,9 @@ export class Game {
         break;
       }
       case 'guanyu': {
-        this.fx.guanyuFan(p.x, p.y, st.range * 1.25, '#10b981');
+        const facingTarget = this.findTarget(p.x, p.y, st.range * 1.25);
+        const facing = facingTarget ? Math.atan2(facingTarget.y - p.y, facingTarget.x - p.x) : -Math.PI * 0.1;
+        this.fx.guanyuFan(p.x, p.y, st.range * 1.25, '#10b981', facing);
         for (const e of [...this.enemies]) {
           if (Math.hypot(e.x - p.x, e.y - p.y) <= st.range * 1.25) {
             this.damage(e, st.dmg * 3.2, u);
@@ -1661,7 +1665,7 @@ export class Game {
       case 'liubei': {
         if (this.adouHp < this.adouMax) {
           this.adouHp = Math.min(this.adouMax, this.adouHp + 2);
-          this.fx.liubeiHeal(ADOU_POS.x, ADOU_POS.y);
+          this.fx.liubeiHeal(p.x, p.y, ADOU_POS.x, ADOU_POS.y);
           this.opts.onEvent('toast', { text: '仁德 · 阿斗恢复2点生命' });
         } else {
           this.atkBuff = 0.35; this.atkBuffT = 9;
@@ -1677,6 +1681,7 @@ export class Game {
           const pt = pathPoint(t);
           setTimeout(() => {
             if (this.destroyed) return;
+            this.fx.directional(p.x, p.y, pt.x, pt.y, '#f59e0b', 0.045, 0.22);
             this.fx.gongImpact(pt.x, pt.y, '#b45309');
             this.fx.blot(pt.x, pt.y, 0.7, '#2b2219', 0.8, 0.4);
           }, i * 45);
@@ -1703,7 +1708,7 @@ export class Game {
       case 'lubu': {
         const marked = this.findNearestToAdou();
         if (!marked) break;
-        this.showLubuMarker(marked);
+        this.showLubuMarker(marked, p.x, p.y);
         setTimeout(() => {
           if (this.destroyed || this.ended) return;
           // 若预警目标已被击败，重新锁定当前最接近阿斗的敌军。
@@ -1733,10 +1738,12 @@ export class Game {
     return best;
   }
   /** 吕布跃击前的红色落点预警圈，持续并跟随目标1秒。 */
-  showLubuMarker(target: Enemy) {
+  showLubuMarker(target: Enemy, sourceX?: number, sourceY?: number) {
     const marker = this.getEff(new THREE.RingGeometry(0.86, 1.04, 48), '#ef4444', 0.82);
     marker.position.set(target.x, target.y, 1.15);
     this.effects.push({ mesh: marker, life: 1, max: 1, kind: 'marker', target });
+    if (sourceX !== undefined && sourceY !== undefined) this.fx.directional(sourceX, sourceY, target.x, target.y, '#ef4444', 0.09, 0.42);
+    this.fx.glyph(target.x, target.y, '锁', '#fecaca', 1.1, 0.72, 0.78);
     this.fx.glow(target.x, target.y, 1.5, '#ef4444', 0.3, 0.55);
   }
   applyStun(e: Enemy, t: number) {

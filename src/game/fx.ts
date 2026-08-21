@@ -369,6 +369,45 @@ export class FxEngine {
     this.fades.push({ mesh: m, mat, life, max: life, baseA, grow: 0.35 });
   }
 
+  /** 施法者签名：用角色字印、双层运笔环和源点辉光锁定“谁在施法”。 */
+  sourceMark(x: number, y: number, color: string, sourceGlyph: string, radius = 1.15) {
+    this.arc(x, y, radius, color, -Math.PI * 0.92, Math.PI * 1.44, 0.58, 0.82);
+    this.arc(x, y, radius * 0.7, '#fff4d6', 0.22, Math.PI * 1.1, 0.46, 0.62);
+    this.glow(x, y, radius * 1.2, color, 0.42, 0.42);
+    this.glyph(x, y, sourceGlyph, '#fff0bd', Math.min(2.1, radius * 1.45), 0.72, 0.9);
+  }
+
+  /** 高频普攻的轻量兵种签名：保留施法者辨识度，但不会遮满战场。 */
+  sourceStamp(x: number, y: number, color: string, sourceGlyph: string) {
+    this.glow(x, y, 0.42, color, 0.16, 0.64);
+    this.glyph(x, y, sourceGlyph, color, 0.52, 0.2, 0.8);
+  }
+
+  /** 有方向的能量线：主体光束 + 双层箭头，明确从施法者飞向目标。 */
+  directional(x1: number, y1: number, x2: number, y2: number, color: string, width = 0.1, life = 0.2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.08) return;
+    const ux = dx / len, uy = dy / len;
+    const px = -uy, py = ux;
+    this.streak(x1, y1, x2, y2, color, width, life, 0.76);
+    this.glow(x1, y1, Math.max(0.25, width * 3.5), color, life * 1.25, 0.55);
+    this.glow(x2, y2, Math.max(0.42, width * 5), '#fff4d6', life * 1.1, 0.65);
+    for (const k of [0.48, 0.76]) {
+      const hx = x1 + dx * k, hy = y1 + dy * k;
+      const back = Math.min(0.38, len * 0.12);
+      this.streak(hx, hy, hx - ux * back + px * back * 0.6, hy - uy * back + py * back * 0.6, color, width * 0.62, life * 0.86, 0.82);
+      this.streak(hx, hy, hx - ux * back - px * back * 0.6, hy - uy * back - py * back * 0.6, color, width * 0.62, life * 0.86, 0.82);
+    }
+  }
+
+  /** 命中反馈：高亮核心、外圈和少量爆裂粒子，强化“打到谁”。 */
+  hitSpark(x: number, y: number, color: string, crit = false) {
+    this.glow(x, y, crit ? 0.95 : 0.52, crit ? '#fff0ad' : color, crit ? 0.22 : 0.14, crit ? 0.95 : 0.72);
+    this.ring(x, y, crit ? 0.62 : 0.34, color, crit ? 0.24 : 0.16, crit ? 0.86 : 0.62, crit ? 1.8 : 1.4);
+    this.burst(x, y, crit ? '#fff4d6' : color, crit ? 8 : 3, crit ? 3.6 : 2.2, crit ? 0.13 : 0.08, crit ? 0.3 : 0.2);
+  }
+
   /** 不完整的墨环：比完整圆环更接近书法运笔。 */
   arc(x: number, y: number, r: number, color: string, start = -0.8, span = 1.7, life = 0.4, baseA = 0.75) {
     const g = new THREE.RingGeometry(r * 0.82, r, 40, 1, start, span);
@@ -410,11 +449,72 @@ export class FxEngine {
 
   // ---------- 兵种攻击特效 ----------
 
-  /** 刀兵：白刃斩痕 + 墨点飞溅 */
+  /** 刀兵普攻：双层弧刃、交叉闪锋、命中墨爆。 */
+  daoAttack(x: number, y: number, tx: number, ty: number, color: string) {
+    const ang = Math.atan2(ty - y, tx - x);
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    const px = -dy, py = dx;
+    const len = Math.hypot(tx - x, ty - y);
+    this.sourceStamp(x, y, color, '刀');
+    this.directional(x, y, tx, ty, color, 0.045, 0.13);
+    this.streak(x + px * 0.34 - dx * 0.18, y + py * 0.34 - dy * 0.18, tx + px * 0.62, ty + py * 0.62, '#fff8e7', 0.18, 0.18, 0.94);
+    this.streak(x - px * 0.22, y - py * 0.22, x + dx * Math.min(1.4, len * 0.45) - px * 0.72, y + dy * Math.min(1.4, len * 0.45) - py * 0.72, color, 0.11, 0.24, 0.86);
+    this.streak(tx - px * 0.7 - dx * 0.2, ty - py * 0.7 - dy * 0.2, tx + px * 0.7, ty + py * 0.7, '#fef3c7', 0.1, 0.22, 0.9);
+    this.arc(tx, ty, 0.54, color, ang - 1.25, 1.72, 0.22, 0.82);
+    this.glow(tx, ty, 0.72, '#fff4d6', 0.18, 0.9);
+    this.burst(tx, ty, color, 8, 3.8, 0.11, 0.28);
+    this.inkField.emit({ x: tx, y: ty, z: 0.3, vx: -px * 1.2, vy: -py * 1.2, life: 0.58, size0: 0.24, size1: 0.52, a0: 0.46, a1: 0, color: '#2b2219' });
+  }
+
+  /** 枪兵普攻：三道并列枪芒，中央枪尖带贯穿箭头。 */
+  qiangAttack(x: number, y: number, tx: number, ty: number, color: string) {
+    const dx0 = tx - x, dy0 = ty - y;
+    const len = Math.hypot(dx0, dy0) || 1;
+    const dx = dx0 / len, dy = dy0 / len;
+    const px = -dy, py = dx;
+    this.sourceStamp(x, y, color, '枪');
+    this.directional(x, y, tx, ty, color, 0.06, 0.18);
+    for (const off of [-0.16, 0, 0.16]) {
+      const sx = x + px * off, sy = y + py * off;
+      const ex = tx + px * off, ey = ty + py * off;
+      this.streak(sx, sy, ex, ey, off === 0 ? '#eefcf8' : color, off === 0 ? 0.13 : 0.075, 0.2, off === 0 ? 0.95 : 0.72);
+    }
+    this.streak(x - px * 0.3, y - py * 0.3, x + dx * 0.9 - px * 0.3, y + dy * 0.9 - py * 0.3, '#d9fff3', 0.2, 0.14, 0.92);
+    this.ring(tx, ty, 0.52, color, 0.2, 0.72, 1.5);
+    this.glow(tx, ty, 0.76, '#eafff6', 0.18, 0.88);
+    this.burst(tx, ty, color, 10, 3.5, 0.1, 0.3);
+    for (let i = 1; i < 4; i++) {
+      const k = i / 4;
+      this.glow(x + dx0 * k, y + dy0 * k, 0.18, color, 0.14 + i * 0.02, 0.62);
+    }
+  }
+
+  /** 骑兵普攻：低空冲锋拖尾 + 蹄火 + 定向重击波。 */
+  cavalryCharge(x: number, y: number, tx: number, ty: number, color: string) {
+    const dx0 = tx - x, dy0 = ty - y;
+    const len = Math.hypot(dx0, dy0) || 1;
+    const dx = dx0 / len, dy = dy0 / len;
+    const px = -dy, py = dx;
+    this.sourceStamp(x, y, color, '骑');
+    this.directional(x, y, tx, ty, color, 0.11, 0.24);
+    for (const off of [-0.3, 0, 0.3]) {
+      this.streak(x + px * off - dx * 0.7, y + py * off - dy * 0.7, tx + px * off, ty + py * off, off === 0 ? '#fff2d0' : color, off === 0 ? 0.17 : 0.08, 0.26, off === 0 ? 0.96 : 0.62);
+    }
+    this.burst(x + dx * len * 0.42, y + dy * len * 0.42, '#fbbf24', 8, 2.8, 0.1, 0.28, 0.4);
+    this.ring(tx, ty, 1.7, color, 0.32, 0.74, 2.1);
+    this.ring(tx, ty, 0.72, '#fff2cf', 0.22, 0.8, 1.8);
+    this.burst(tx, ty, color, 20, 5.8, 0.18, 0.45, 0.7);
+    this.cloud(tx, ty, '#3c2b1d', 7, 0.65, 0.78);
+    this.hooks.punch?.(0.08);
+    this.hooks.shake?.(0.16, 0.12);
+  }
+
+  /** 刀兵旧接口保留给英雄/兼容调用。 */
   daoSlash(x: number, y: number, tx: number, ty: number, color: string) {
     const ang = Math.atan2(ty - y, tx - x);
     const r = Math.hypot(tx - x, ty - y);
     const px = -Math.sin(ang), py = Math.cos(ang);
+    this.directional(x, y, tx, ty, color, 0.07, 0.16);
     // 双重刀光（主体 + 拖尾）
     this.streak(x, y, x + px * 0.25 + Math.cos(ang) * r * 0.92, y + py * 0.25 + Math.sin(ang) * r * 0.92, '#f5f0e6', 0.34, 0.14);
     this.streak(x, y, x + Math.cos(ang) * r * 0.8, y + Math.sin(ang) * r * 0.8, color, 0.18, 0.2, 0.7);
@@ -422,7 +522,7 @@ export class FxEngine {
     this.inkField.emit({ x: tx, y: ty, z: 0.3, vx: -px * 1.2, vy: -py * 1.2, life: 0.6, size0: 0.3, size1: 0.55, a0: 0.4, a1: 0, color: '#2b2219' });
   }
 
-  /** 枪兵：直线穿阵笔锋 */
+  /** 枪将/赵云技能：直线穿阵笔锋 */
   qiangPierce(x: number, y: number, dx: number, dy: number, range: number, color: string) {
     const ex = x + dx * range, ey = y + dy * range;
     this.streak(x, y, ex, ey, '#eef4f2', 0.3, 0.2);
@@ -436,7 +536,8 @@ export class FxEngine {
   }
 
   /** 骑兵：重击爆发（镜头冲击） */
-  qiImpact(x: number, y: number, color: string) {
+  qiImpact(x: number, y: number, color: string, sourceX?: number, sourceY?: number) {
+    if (sourceX !== undefined && sourceY !== undefined) this.directional(sourceX, sourceY, x, y, color, 0.1, 0.24);
     this.flash(color, 0.3, 0.18);
     this.ring(x, y, 2.2, color, 0.4, 0.8, 2.2);
     this.burst(x, y, color, 22, 5.5, 0.24, 0.55);
@@ -448,21 +549,30 @@ export class FxEngine {
   }
 
   /** 弓兵：箭矢出膛 */
-  gongShot(x: number, y: number, tx: number, ty: number, color: string) {
+  gongShot(x: number, y: number, tx: number, ty: number, color: string, sourceGlyph = '弓') {
     const ang = Math.atan2(ty - y, tx - x);
+    this.sourceStamp(x, y, color, sourceGlyph);
+    this.directional(x, y, tx, ty, color, 0.055, 0.2);
+    this.streak(x, y, tx, ty, '#fff8e8', 0.045, 0.2, 0.88);
+    this.streak(x + Math.cos(ang) * 0.12, y + Math.sin(ang) * 0.12, x + Math.cos(ang) * 0.8, y + Math.sin(ang) * 0.8, color, 0.13, 0.14, 0.78);
     this.glow(x + Math.cos(ang) * 0.4, y + Math.sin(ang) * 0.4, 0.5, color, 0.16, 0.8);
-    this.burst(x, y, color, 3, 1.4, 0.1, 0.25);
+    this.arc(x, y, 0.34, '#fff0bd', ang - 1.2, 0.8, 0.18, 0.72);
+    this.burst(x, y, color, 5, 1.7, 0.1, 0.25);
   }
 
   /** 弓兵：箭矢飞行拖尾 */
   gongTrail(x: number, y: number, color: string) {
     this.glowField.emit({ x, y, z: 0.7, life: 0.18, size0: 0.14, size1: 0.02, a0: 0.9, a1: 0, color });
+    this.inkField.emit({ x, y, z: 0.64, life: 0.2, size0: 0.08, size1: 0.02, a0: 0.48, a1: 0, color: '#fff2cf' });
   }
 
   /** 弓兵：命中爆点 */
   gongImpact(x: number, y: number, color: string) {
-    this.burst(x, y, color, 6, 2.4, 0.13, 0.3);
-    this.glow(x, y, 0.55, '#fff7e6', 0.18, 0.8);
+    this.ring(x, y, 0.52, color, 0.24, 0.74, 1.5);
+    this.streak(x - 0.48, y, x + 0.48, y, '#fff7e6', 0.07, 0.18, 0.86);
+    this.streak(x, y - 0.48, x, y + 0.48, color, 0.06, 0.18, 0.72);
+    this.burst(x, y, color, 10, 2.8, 0.13, 0.3);
+    this.glow(x, y, 0.72, '#fff7e6', 0.2, 0.88);
   }
 
   // ---------- 武将技能 ----------
@@ -470,6 +580,7 @@ export class FxEngine {
   /** 赵云：贯穿光束 */
   zhaoyunBeam(x1: number, y1: number, x2: number, y2: number) {
     const ang = Math.atan2(y2 - y1, x2 - x1);
+    this.directional(x1, y1, x2, y2, '#93c5fd', 0.065, 0.24);
     for (let i = -1; i <= 1; i++) {
       const off = i * 0.12;
       this.streak(x1 - Math.sin(ang) * off, y1 + Math.cos(ang) * off, x2 - Math.sin(ang) * off, y2 + Math.cos(ang) * off, i === 0 ? '#dbeafe' : '#3b82f6', i === 0 ? 0.2 : 0.1, 0.26, i === 0 ? 1 : 0.7);
@@ -480,9 +591,9 @@ export class FxEngine {
   }
 
   /** 关羽：扇形青龙斩 */
-  guanyuFan(x: number, y: number, r: number, color: string) {
+  guanyuFan(x: number, y: number, r: number, color: string, facing = -Math.PI * 0.1) {
     const n = 9;
-    const base = Math.atan2(0 - y, 1 - x); // 朝向大致
+    const base = facing;
     for (let i = 0; i < n; i++) {
       const a = base - 0.9 + (i / (n - 1)) * 1.8;
       setTimeout(() => {
@@ -512,7 +623,8 @@ export class FxEngine {
   }
 
   /** 刘备：仁德金光 */
-  liubeiHeal(x: number, y: number) {
+  liubeiHeal(x: number, y: number, targetX = x, targetY = y) {
+    if (Math.hypot(targetX - x, targetY - y) > 0.1) this.directional(x, y, targetX, targetY, '#fbbf24', 0.08, 0.42);
     for (let i = 0; i < 16; i++) {
       const a = Math.random() * Math.PI * 2;
       this.glowField.emit({
@@ -531,6 +643,7 @@ export class FxEngine {
 
   /** 马超：冲刺流光 */
   machaoDash(x1: number, y1: number, x2: number, y2: number, color: string) {
+    this.directional(x1, y1, x2, y2, color, 0.075, 0.22);
     this.streak(x1, y1, x2, y2, color, 0.2, 0.2, 0.95);
     this.burst(x2, y2, color, 7, 3.4, 0.14, 0.35);
     this.glow(x2, y2, 0.8, '#fbcfe8', 0.22, 0.8);
@@ -538,6 +651,7 @@ export class FxEngine {
 
   /** 吕布：锁定后从阵位跃击至目标 */
   lubuLeap(x1: number, y1: number, x2: number, y2: number, r: number) {
+    this.directional(x1, y1, x2, y2, '#f59e0b', 0.12, 0.3);
     this.streak(x1, y1, x2, y2, '#f59e0b', 0.32, 0.24, 0.95);
     this.streak(x1, y1, x2, y2, '#fff7d6', 0.11, 0.3, 1);
     this.ring(x2, y2, r, '#ef4444', 0.48, 0.9, 1.8);
@@ -620,13 +734,17 @@ export class FxEngine {
   }
 
   /** Boss 技能的视觉锚点：每个机制都有独立颜色、书法字和运动方向。 */
-  bossSkill(x: number, y: number, key: string) {
+  bossSkill(x: number, y: number, key: string, targetX = x, targetY = y) {
+    const bossGlyph = key === 'xiahoudun' ? '夏' : key === 'caoren' ? '曹' : key === 'zhangliao' ? '张' : '许';
+    const bossColor = key === 'caoren' ? '#34d399' : key === 'zhangliao' ? '#60a5fa' : key === 'xiahoudun' ? '#ef4444' : '#f59e0b';
+    this.sourceMark(x, y, bossColor, bossGlyph, 1.3);
     if (key === 'xiahoudun') {
       this.flash('#7f1d1d', 0.24, 0.26);
       this.arc(x, y, 2.9, '#f87171', -0.95, 1.9, 0.55, 0.82);
       this.glyph(x, y, '狂', '#fecaca', 2.4, 0.8, 0.72);
       this.burst(x, y, '#ef4444', 18, 4.4, 0.16, 0.52);
     } else if (key === 'zhangliao') {
+      this.directional(x, y, targetX, targetY, '#60a5fa', 0.14, 0.34);
       this.streak(x - 2.8, y, x + 3.6, y, '#93c5fd', 0.2, 0.34, 0.8);
       this.streak(x - 2.8, y + 0.22, x + 3.6, y + 0.22, '#2563eb', 0.1, 0.4, 0.7);
       this.glyph(x, y, '突', '#bfdbfe', 2.1, 0.72, 0.7);
@@ -648,6 +766,7 @@ export class FxEngine {
   /** 赤壁火势 */
   fire(x: number, y: number) {
     this.glow(x, y, 3.4, '#f97316', 0.9, 0.4);
+    this.ring(x, y, 2.1, '#fb923c', 0.72, 0.45, 1.45);
     for (let i = 0; i < 8; i++) {
       this.glowField.emit({
         x: x + (Math.random() - 0.5) * 2.6, y: y + (Math.random() - 0.5) * 0.4, z: 0.4,
