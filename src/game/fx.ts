@@ -69,6 +69,40 @@ function makeBeamTex(): THREE.CanvasTexture {
   return tex;
 }
 
+/** 收头、露锋的月牙刀光纹理；宽度沿曲线变化，避免廉价的等粗圆弧。 */
+function makeSlashTex(): THREE.CanvasTexture {
+  const W = 512, H = 256;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d')!;
+  const point = (t: number) => {
+    const omt = 1 - t;
+    return {
+      x: omt * omt * 34 + 2 * omt * t * 260 + t * t * 482,
+      y: omt * omt * 212 + 2 * omt * t * 22 + t * t * 174,
+    };
+  };
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let i = 0; i < 90; i++) {
+    const t0 = i / 90, t1 = (i + 1) / 90;
+    const a = point(t0), b = point(t1);
+    const taper = Math.pow(Math.sin(Math.PI * (t0 * 0.96 + 0.02)), 0.72);
+    const grad = g.createLinearGradient(a.x, a.y, b.x, b.y);
+    grad.addColorStop(0, `rgba(255,255,255,${0.5 + taper * 0.45})`);
+    grad.addColorStop(1, `rgba(255,255,255,${0.62 + taper * 0.38})`);
+    g.strokeStyle = grad; g.lineWidth = 4 + taper * 42;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  }
+  // 刃口白芯
+  g.strokeStyle = 'rgba(255,255,255,.92)'; g.lineWidth = 4;
+  g.beginPath();
+  for (let i = 0; i <= 60; i++) {
+    const p = point(i / 60); i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y);
+  }
+  g.stroke();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 /** 八卦星盘纹理：技能蓄能、锁定与领域效果的共同高级视觉语言。 */
 function makeRuneTex(): THREE.CanvasTexture {
   if (runeTex) return runeTex;
@@ -270,6 +304,7 @@ export class FxEngine {
   private glowTex: THREE.Texture;
   private inkTex: THREE.Texture;
   private beamTex: THREE.Texture;
+  private slashTex: THREE.Texture;
   private glowField: ParticleField;
   private inkField: ParticleField;
   private fades: FadeMesh[] = [];
@@ -285,6 +320,7 @@ export class FxEngine {
     this.glowTex = makeTex('glow');
     this.inkTex = makeTex('ink');
     this.beamTex = makeBeamTex();
+    this.slashTex = makeSlashTex();
     this.glowField = new ParticleField(scene, this.glowTex, true);
     this.inkField = new ParticleField(scene, this.inkTex, false);
     for (let i = 0; i < 12; i++) {
@@ -416,6 +452,52 @@ export class FxEngine {
     this.streak(x1, y1, x2, y2, color, width * 2.5, life * 1.35, 0.28);
     this.streak(x1, y1, x2, y2, color, width, life, 0.96);
     this.streak(x1, y1, x2, y2, '#ffffff', width * 0.28, life * 0.72, 1);
+  }
+
+  /** 有真实收锋的月牙斩，不使用完整圆环。 */
+  swoosh(x: number, y: number, radius: number, angle: number, color: string, life = 0.28, flip = false, opacity = 0.92) {
+    if (this.disposed) return;
+    const mat = new THREE.MeshBasicMaterial({ map: this.slashTex, color: new THREE.Color(color), transparent: true,
+      opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2.2, radius * 1.08), mat);
+    m.position.set(x, y, 1.08); m.rotation.z = angle;
+    if (flip) m.scale.y = -1;
+    this.scene.add(m);
+    this.fades.push({ mesh: m, mat, life, max: life, baseA: opacity, grow: 0.18 });
+  }
+
+  /** 实体枪尖轮廓；三角锋指向攻击方向。 */
+  spearHead(x: number, y: number, angle: number, color: string, size = 0.32, life = 0.2) {
+    if (this.disposed) return;
+    const shape = new THREE.Shape();
+    shape.moveTo(size * 0.62, 0); shape.lineTo(-size * 0.5, size * 0.34);
+    shape.lineTo(-size * 0.26, 0); shape.lineTo(-size * 0.5, -size * 0.34); shape.closePath();
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.94,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat);
+    m.position.set(x, y, 1.15); m.rotation.z = angle; this.scene.add(m);
+    this.fades.push({ mesh: m, mat, life, max: life, baseA: 0.94, grow: 0.12 });
+  }
+
+  /** 骑兵冲锋共用的马蹄、尘土和前倾冲击，不出现能量法阵。 */
+  cavalryWeapon(x: number, y: number, tx: number, ty: number, dust: string, edge: string, elite = false) {
+    const vx = tx - x, vy = ty - y, len = Math.hypot(vx, vy) || 1;
+    const dx = vx / len, dy = vy / len, px = -dy, py = dx;
+    // 两条贴地速度残影，模拟坐骑和骑手的不同高度。
+    this.streak(x - dx * 0.45 + px * 0.18, y - dy * 0.45 + py * 0.18, tx - dx * 0.08 + px * 0.12, ty - dy * 0.08 + py * 0.12, edge, elite ? 0.11 : 0.08, 0.3, 0.66);
+    this.streak(x - dx * 0.52 - px * 0.18, y - dy * 0.52 - py * 0.18, tx - dx * 0.12 - px * 0.12, ty - dy * 0.12 - py * 0.12, dust, elite ? 0.085 : 0.06, 0.34, 0.54);
+    // 沿途马蹄尘，不用发光圆环。
+    for (const k of [0.18, 0.38, 0.58, 0.78]) {
+      const hx = x + vx * k, hy = y + vy * k;
+      this.inkField.emit({ x: hx + px * (k % 0.4 > 0.2 ? 0.18 : -0.18), y: hy, z: 0.18,
+        vx: -dx * 0.35 + (Math.random() - 0.5) * 0.35, vy: -dy * 0.35 + (Math.random() - 0.5) * 0.35,
+        life: 0.42 + Math.random() * 0.18, size0: 0.24, size1: 0.62, a0: 0.34, a1: 0, color: dust, drag: 0.94 });
+      this.streak(hx - px * 0.11, hy - py * 0.11, hx + px * 0.11, hy + py * 0.11, '#f5e2c8', 0.025, 0.28, 0.42);
+    }
+    this.spearHead(tx + dx * 0.26, ty + dy * 0.26, Math.atan2(dy, dx), '#fff7ed', elite ? 0.42 : 0.32, 0.2);
+    this.cracks(tx, ty, dust, elite ? 0.92 : 0.68, elite ? 6 : 4, 0.45);
+    this.cloud(tx, ty, dust, elite ? 8 : 5, elite ? 0.62 : 0.45, 0.62);
+    this.hooks.punch?.(elite ? 0.055 : 0.035);
   }
 
   /** 放射速度线，作为重击时的空间压缩感。 */
@@ -565,62 +647,48 @@ export class FxEngine {
     }
   }
 
-  /**
-   * 七名武将的专属普攻签名。这里不负责伤害，只负责把每位武将的武器、
-   * 性格和色彩在 0.2 秒内读出来，彻底摆脱“英雄套兵种模板”的廉价感。
-   */
+  /** 七名武将的普攻严格服从武器类型，不混入技能阵盘和满屏爆炸。 */
   heroAttack(key: string, x: number, y: number, tx: number, ty: number, color: string) {
     const ang = Math.atan2(ty - y, tx - x);
     const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx;
-    const dist = Math.hypot(tx - x, ty - y);
     if (key === 'zhaoyun') {
-      // 银龙枪：瞬身残影 + 螺旋枪尖。
-      this.rune(x, y, 0.58, '#60a5fa', 0.3, 5.5, 0.68);
-      this.blade(x - dx * 0.28, y - dy * 0.28, tx + dx * 0.55, ty + dy * 0.55, '#38bdf8', 0.105, 0.24);
-      for (const off of [-0.18, 0.18]) this.streak(x + px * off, y + py * off, tx + px * off, ty + py * off, '#93c5fd', 0.045, 0.3, 0.72);
-      this.arc(tx, ty, 0.56, '#e0f2fe', ang - 1.2, 2.4, 0.22, 0.92, 0, 9);
-      this.rays(tx, ty, '#38bdf8', 0.9, 7, 0.22, ang);
+      // 银枪：一条笔直枪杆、一个锐利枪尖、少量银屑。
+      this.streak(x - dx * 0.22, y - dy * 0.22, tx + dx * 0.52, ty + dy * 0.52, '#8ba6bd', 0.075, 0.25, 0.62);
+      this.streak(x, y, tx + dx * 0.48, ty + dy * 0.48, '#f8fafc', 0.025, 0.19, 1);
+      this.spearHead(tx + dx * 0.36, ty + dy * 0.36, ang, '#dbeafe', 0.36, 0.24);
+      this.burst(tx, ty, '#bfdbfe', 5, 2.8, 0.075, 0.22);
     } else if (key === 'guanyu') {
-      // 青龙偃月：厚重月牙，不做普通直线弹道。
-      this.cone(x, y, Math.min(dist + 0.5, 4.8), ang, 0.52, '#10b981', 0.28, 0.16);
-      for (const [r, w, c] of [[0.72, 0.18, '#ecfdf5'], [0.92, 0.12, '#34d399'], [1.1, 0.06, '#047857']] as const)
-        this.arc(tx, ty, r, c, ang + 1.85, 2.55, 0.32, 0.9, 0, -4 + w * 10);
-      this.blade(x + px * 0.18, y + py * 0.18, tx - px * 0.34, ty - py * 0.34, '#6ee7b7', 0.18, 0.28);
-      this.cloud(tx, ty, '#064e3b', 5, 0.4, 0.55);
+      // 偃月刀：厚重单月牙，绿色只做刃缘，不做激光束。
+      this.swoosh(tx, ty, 1.25, ang + Math.PI * 0.5, '#34d399', 0.34, false, 0.88);
+      this.swoosh(tx, ty, 0.98, ang + Math.PI * 0.5, '#f0fdf4', 0.22, false, 0.86);
+      this.cloud(tx - dx * 0.18, ty - dy * 0.18, '#20362c', 3, 0.28, 0.45);
     } else if (key === 'zhangfei') {
-      // 蛇矛：黑紫电裂，命中像钉进地面。
-      this.lightning(x, y, tx, ty, '#c084fc', 5, 0.24, 0.075);
-      this.blade(x, y, tx, ty, '#e9d5ff', 0.09, 0.18);
-      this.cracks(tx, ty, '#7e22ce', 0.82, 6, 0.42);
-      this.ring(tx, ty, 0.5, '#a855f7', 0.2, 0.75, 1.75);
+      // 丈八蛇矛：黑铁长刺，末端分叉。
+      this.streak(x, y, tx + dx * 0.42, ty + dy * 0.42, '#57534e', 0.11, 0.25, 0.82);
+      this.streak(x, y, tx + dx * 0.42, ty + dy * 0.42, '#f5f5f4', 0.025, 0.17, 0.9);
+      this.spearHead(tx + dx * 0.32, ty + dy * 0.32, ang, '#a78bfa', 0.4, 0.24);
+      this.streak(tx, ty, tx - dx * 0.28 + px * 0.24, ty - dy * 0.28 + py * 0.24, '#a78bfa', 0.045, 0.2, 0.8);
+      this.streak(tx, ty, tx - dx * 0.28 - px * 0.24, ty - dy * 0.28 - py * 0.24, '#a78bfa', 0.045, 0.2, 0.8);
     } else if (key === 'liubei') {
-      // 双股剑：金蓝双弧交汇。
-      this.rune(x, y, 0.5, '#fbbf24', 0.3, -4.2, 0.66);
-      this.blade(x + px * 0.18, y + py * 0.18, tx - px * 0.16, ty - py * 0.16, '#fde68a', 0.08, 0.24);
-      this.blade(x - px * 0.18, y - py * 0.18, tx + px * 0.16, ty + py * 0.16, '#60a5fa', 0.07, 0.26);
-      this.rune(tx, ty, 0.46, '#fff7cc', 0.26, 6, 0.74);
+      // 雌雄双股剑：两道方向相反的小型剑气交叉飞出。
+      this.swoosh(x + dx * 0.45, y + dy * 0.45, 0.62, ang + 0.32, '#fde68a', 0.24, false, 0.82);
+      this.swoosh(x + dx * 0.42, y + dy * 0.42, 0.58, ang - 0.32, '#93c5fd', 0.25, true, 0.78);
     } else if (key === 'huangzhong') {
-      // 烈阳箭：蓄能准星 + 实体箭头，飞行阶段由 heroProjectileTrail 接管。
-      this.rune(x, y, 0.62, '#f59e0b', 0.32, 3.8, 0.74);
-      this.arc(x, y, 0.45, '#fde68a', ang - 1.25, 2.5, 0.26, 0.92, 0, -5);
-      this.rays(x, y, '#f59e0b', 0.92, 8, 0.24, ang);
-      this.blade(x, y, x + dx * 0.88, y + dy * 0.88, '#fff7ed', 0.075, 0.16);
+      // 强弓：弓弦回弹、箭尾一撮火星。
+      this.swoosh(x, y, 0.55, ang + Math.PI, '#d6a85f', 0.2, false, 0.72);
+      this.streak(x - px * 0.28, y - py * 0.28, x + dx * 0.42, y + dy * 0.42, '#fff7ed', 0.035, 0.14, 0.95);
+      this.burst(x, y, '#fbbf24', 4, 1.8, 0.06, 0.18);
     } else if (key === 'machao') {
-      // 西凉银骑：三段超高速残像。
-      for (const [off, c, w] of [[0, '#fff1f2', 0.12], [0.2, '#fb7185', 0.075], [-0.2, '#c026d3', 0.055]] as const)
-        this.blade(x + px * off - dx * 0.5, y + py * off - dy * 0.5, tx + px * off, ty + py * off, c, w, 0.2 + Math.abs(off) * 0.3);
-      this.rays(tx, ty, '#f472b6', 1.05, 9, 0.24, ang);
-      this.ring(tx, ty, 0.64, '#fb7185', 0.24, 0.86, 2.25);
+      this.cavalryWeapon(x, y, tx, ty, '#be8a62', '#f5d0a9', true);
     } else if (key === 'lubu') {
-      // 方天画戟：赤金十字斩与微型地裂。
-      this.flash('#7f1d1d', 0.08, 0.12);
-      this.blade(x, y, tx, ty, '#fbbf24', 0.18, 0.28);
-      this.blade(tx - px * 0.85, ty - py * 0.85, tx + px * 0.85, ty + py * 0.85, '#ef4444', 0.15, 0.3);
-      this.cracks(tx, ty, '#b91c1c', 1.05, 7, 0.52);
-      this.rays(tx, ty, '#f59e0b', 1.25, 10, 0.3, ang);
+      // 方天画戟：一记宽阔横扫，末端附带戟尖直刺。
+      this.swoosh(tx, ty, 1.45, ang + Math.PI * 0.52, '#ef4444', 0.36, false, 0.9);
+      this.swoosh(tx, ty, 1.12, ang + Math.PI * 0.52, '#fde68a', 0.24, false, 0.84);
+      this.streak(x, y, tx + dx * 0.42, ty + dy * 0.42, '#fbbf24', 0.055, 0.22, 0.8);
+      this.spearHead(tx + dx * 0.36, ty + dy * 0.36, ang, '#fff7d6', 0.38, 0.22);
       this.hooks.punch?.(0.06);
     } else {
-      this.blade(x, y, tx, ty, color, 0.1, 0.22);
+      this.swoosh(tx, ty, 0.9, ang + Math.PI * 0.5, color, 0.25);
     }
   }
 
@@ -638,14 +706,15 @@ export class FxEngine {
 
   heroProjectileTrail(key: string, x: number, y: number, color: string, dx: number, dy: number) {
     if (key === 'huangzhong') {
-      this.glowField.emit({ x, y, z: 0.85, life: 0.22, size0: 0.3, size1: 0.025, a0: 1, a1: 0, color: '#fef3c7' });
-      this.streak(x - dx * 0.62, y - dy * 0.62, x + dx * 0.16, y + dy * 0.16, '#f59e0b', 0.08, 0.1, 0.9);
-      this.streak(x - dx * 0.38, y - dy * 0.38, x + dx * 0.08, y + dy * 0.08, '#ffffff', 0.025, 0.08, 1);
+      const px = -dy, py = dx;
+      this.streak(x - dx * 0.68, y - dy * 0.68, x + dx * 0.16, y + dy * 0.16, '#8b5e2f', 0.05, 0.1, 0.95);
+      this.streak(x - dx * 0.5, y - dy * 0.5, x - dx * 0.18 + px * 0.18, y - dy * 0.18 + py * 0.18, '#b45309', 0.04, 0.11, 0.82);
+      this.streak(x - dx * 0.5, y - dy * 0.5, x - dx * 0.18 - px * 0.18, y - dy * 0.18 - py * 0.18, '#f59e0b', 0.04, 0.11, 0.82);
+      this.spearHead(x + dx * 0.17, y + dy * 0.17, Math.atan2(dy, dx), '#f8fafc', 0.2, 0.1);
     } else if (key === 'liubei') {
       const px = -dy, py = dx;
-      this.glowField.emit({ x, y, z: 0.8, life: 0.24, size0: 0.22, size1: 0.02, a0: 0.95, a1: 0, color: '#fde68a' });
-      this.streak(x - dx * 0.42 + px * 0.08, y - dy * 0.42 + py * 0.08, x, y, '#fbbf24', 0.045, 0.1, 0.9);
-      this.streak(x - dx * 0.36 - px * 0.08, y - dy * 0.36 - py * 0.08, x, y, '#60a5fa', 0.04, 0.11, 0.82);
+      this.streak(x - dx * 0.34 + px * 0.1, y - dy * 0.34 + py * 0.1, x + dx * 0.05, y + dy * 0.05, '#fde68a', 0.045, 0.1, 0.82);
+      this.streak(x - dx * 0.3 - px * 0.1, y - dy * 0.3 - py * 0.1, x + dx * 0.05, y + dy * 0.05, '#93c5fd', 0.04, 0.11, 0.76);
     } else {
       this.gongTrail(x, y, color, dx, dy);
     }
@@ -653,16 +722,14 @@ export class FxEngine {
 
   heroProjectileImpact(key: string, x: number, y: number, color: string) {
     if (key === 'huangzhong') {
-      this.rune(x, y, 0.72, '#f59e0b', 0.34, -7, 0.86);
-      this.rays(x, y, '#fbbf24', 1.3, 12, 0.3);
-      this.ring(x, y, 0.82, '#fde68a', 0.3, 0.9, 2.35);
-      this.burst(x, y, '#fff7ed', 10, 4.8, 0.13, 0.32);
-      this.hooks.punch?.(0.04);
+      this.burst(x, y, '#fff7ed', 12, 4.6, 0.1, 0.3);
+      this.burst(x, y, '#f59e0b', 7, 3.1, 0.075, 0.26);
+      this.glow(x, y, 0.48, '#fde68a', 0.16, 0.78);
+      this.hooks.punch?.(0.028);
     } else if (key === 'liubei') {
-      this.rune(x, y, 0.55, '#fbbf24', 0.3, 8, 0.82);
-      this.arc(x, y, 0.62, '#60a5fa', -0.8, 2.4, 0.3, 0.86, 0, -6);
-      this.arc(x, y, 0.48, '#fde68a', 2.1, 2.4, 0.28, 0.9, 0, 6);
-      this.rays(x, y, '#fff7cc', 0.9, 8, 0.25);
+      this.swoosh(x, y, 0.58, 0.62, '#fde68a', 0.22, false, 0.78);
+      this.swoosh(x, y, 0.54, -0.62, '#93c5fd', 0.24, true, 0.72);
+      this.burst(x, y, '#f8fafc', 5, 2.6, 0.065, 0.2);
     } else this.gongImpact(x, y, color);
   }
 
@@ -711,131 +778,43 @@ export class FxEngine {
 
   // ---------- 兵种攻击特效 ----------
 
-  /** 刀兵普攻：次世代「裂空斩」——蓄能、三重刀轨、十字切面与核心爆裂。 */
+  /** 刀兵普攻：近身月牙斩。只有刀弧、刃风和被切开的墨痕。 */
   daoAttack(x: number, y: number, tx: number, ty: number, color: string) {
     const ang = Math.atan2(ty - y, tx - x);
-    const dx = Math.cos(ang), dy = Math.sin(ang);
-    const px = -dy, py = dx;
-    const edge = '#22d3ee';
-    const core = '#ecfeff';
-    const accent = '#2563eb';
-
-    this.sourceStamp(x, y, edge, '刀');
-    this.rune(x, y, 0.42, edge, 0.2, 6.5, 0.58);
-    this.glow(x, y, 0.68, '#67e8f9', 0.18, 0.68);
-    this.arc(x, y, 0.46, edge, -0.95, 1.9, 0.24, 0.78, ang, 4.5);
-    this.burst(x, y, core, 5, 2.5, 0.08, 0.18);
-
-    // 主刀轨 + 两条偏移残影，视觉上像把空气切开而不是一根普通光线。
-    this.directional(x, y, tx, ty, accent, 0.025, 0.16);
-    for (const [off, col, width, life] of [[0, core, 0.22, 0.22], [0.25, edge, 0.105, 0.28], [-0.25, '#3b82f6', 0.09, 0.32]] as const) {
-      const sx = x + px * off - dx * 0.24;
-      const sy = y + py * off - dy * 0.24;
-      const ex = tx + px * off + dx * 0.16;
-      const ey = ty + py * off + dy * 0.16;
-      this.streak(sx, sy, ex, ey, col, width, life, col === core ? 1 : 0.78);
-    }
-    for (const k of [0.24, 0.48, 0.72]) {
-      this.glow(x + (tx - x) * k, y + (ty - y) * k, 0.14 + k * 0.08, edge, 0.16, 0.7);
-    }
-
-    // 命中瞬间：双层切面 + 白热核心 + 逆向碎片。
-    const slash = ang + Math.PI * 0.72;
-    const slash2 = ang - Math.PI * 0.72;
-    this.streak(tx - Math.cos(slash) * 0.94, ty - Math.sin(slash) * 0.94, tx + Math.cos(slash) * 0.94, ty + Math.sin(slash) * 0.94, core, 0.17, 0.2, 0.98);
-    this.streak(tx - Math.cos(slash2) * 0.66, ty - Math.sin(slash2) * 0.66, tx + Math.cos(slash2) * 0.66, ty + Math.sin(slash2) * 0.66, edge, 0.09, 0.24, 0.9);
-    this.arc(tx, ty, 0.7, edge, ang - 1.32, 1.92, 0.3, 0.9, 0, -5);
-    this.rays(tx, ty, edge, 0.96, 7, 0.22, ang);
-    this.ring(tx, ty, 0.52, accent, 0.24, 0.8, 2.4);
-    this.glow(tx, ty, 1.0, core, 0.2, 0.9);
-    this.burst(tx, ty, edge, 15, 4.4, 0.12, 0.34);
-    this.burst(tx, ty, core, 6, 2.8, 0.09, 0.22);
-    this.inkField.emit({ x: tx, y: ty, z: 0.3, vx: -px * 1.4, vy: -py * 1.4, life: 0.62, size0: 0.22, size1: 0.62, a0: 0.48, a1: 0, color: color || '#172b35' });
-    this.hooks.punch?.(0.028);
+    const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx;
+    this.swoosh(tx, ty, 0.98, ang + Math.PI * 0.5, '#cbd5e1', 0.28, false, 0.9);
+    this.swoosh(tx - dx * 0.08, ty - dy * 0.08, 0.76, ang + Math.PI * 0.5, '#ffffff', 0.18, false, 0.82);
+    // 刀柄方向只留极短挥动残影，避免变成远程激光。
+    this.streak(x - px * 0.22, y - py * 0.22, x + dx * 0.62 + px * 0.18, y + dy * 0.62 + py * 0.18, '#94a3b8', 0.055, 0.17, 0.52);
+    this.burst(tx, ty, '#e2e8f0', 6, 3.1, 0.075, 0.22);
+    this.inkField.emit({ x: tx, y: ty, z: 0.26, vx: -px * 0.7, vy: -py * 0.7, life: 0.48,
+      size0: 0.18, size1: 0.48, a0: 0.38, a1: 0, color: color || '#20252a' });
+    this.hooks.punch?.(0.018);
   }
 
-  /** 枪兵普攻：电磁枪阵——五重平行枪芒、轨道脉冲、贯穿式命中环。 */
+  /** 枪兵普攻：单点贯穿刺。窄、长、快，枪尖明显而没有多余光环。 */
   qiangAttack(x: number, y: number, tx: number, ty: number, color: string) {
     const dx0 = tx - x, dy0 = ty - y;
     const len = Math.hypot(dx0, dy0) || 1;
     const dx = dx0 / len, dy = dy0 / len;
     const px = -dy, py = dx;
-    const edge = '#2dd4bf';
-    const core = '#ecfffb';
-    const deep = '#0f766e';
-
-    this.sourceStamp(x, y, edge, '枪');
-    this.rune(x, y, 0.44, edge, 0.22, -7, 0.6);
-    this.glow(x, y, 0.72, '#5eead4', 0.2, 0.7);
-    this.arc(x, y, 0.48, edge, -0.8, 1.6, 0.22, 0.82, Math.atan2(dy, dx), -4);
-    this.directional(x, y, tx, ty, deep, 0.035, 0.22);
-
-    for (const off of [-0.22, -0.11, 0, 0.11, 0.22]) {
-      const sx = x + px * off;
-      const sy = y + py * off;
-      const ex = tx + px * off;
-      const ey = ty + py * off;
-      const isCore = off === 0;
-      this.streak(sx, sy, ex, ey, isCore ? core : edge, isCore ? 0.16 : 0.065, 0.24 + Math.abs(off) * 0.18, isCore ? 1 : 0.74);
-    }
-    // 沿枪线高速跳动的能量节点，给“贯穿”一个清晰的速度感。
-    for (let i = 1; i <= 4; i++) {
-      const k = i / 5;
-      const pulse = 0.13 + i * 0.025;
-      this.glow(x + dx0 * k, y + dy0 * k, pulse, i % 2 ? edge : core, 0.2, 0.82);
-    }
-    this.streak(x - px * 0.42, y - py * 0.42, x + dx * 1.12 - px * 0.42, y + dy * 1.12 - py * 0.42, core, 0.23, 0.15, 0.96);
-
-    this.ring(tx, ty, 0.72, edge, 0.28, 0.82, 2.25);
-    this.rays(tx, ty, edge, 0.94, 8, 0.24, Math.atan2(dy, dx));
-    this.arc(tx, ty, 0.48, core, -0.55, Math.PI * 1.5, 0.22, 0.9, Math.atan2(dy, dx), 6);
-    this.glow(tx, ty, 0.94, core, 0.2, 0.9);
-    this.burst(tx, ty, edge, 18, 4.1, 0.11, 0.34);
-    this.burst(tx, ty, core, 5, 2.5, 0.08, 0.22);
-    this.burst(tx, ty, color, 3, 2.1, 0.06, 0.18);
-    this.hooks.punch?.(0.036);
+    // 枪杆的暗影和正中白刃构成一次干净的直刺。
+    this.streak(x - dx * 0.34, y - dy * 0.34, tx + dx * 0.5, ty + dy * 0.5, color, 0.085, 0.27, 0.58);
+    this.streak(x - dx * 0.08, y - dy * 0.08, tx + dx * 0.48, ty + dy * 0.48, '#ecfdf5', 0.026, 0.19, 1);
+    this.spearHead(tx + dx * 0.38, ty + dy * 0.38, Math.atan2(dy, dx), '#d1fae5', 0.38, 0.22);
+    // 枪缨在出手点横向一甩。
+    this.streak(x - dx * 0.05 - px * 0.24, y - dy * 0.05 - py * 0.24,
+      x - dx * 0.05 + px * 0.24, y - dy * 0.05 + py * 0.24, '#b91c1c', 0.055, 0.24, 0.72);
+    this.burst(tx, ty, '#a7f3d0', 7, 3.6, 0.07, 0.24);
+    this.inkField.emit({ x: tx, y: ty, z: 0.22, vx: dx * 0.65, vy: dy * 0.65, life: 0.38,
+      size0: 0.14, size1: 0.32, a0: 0.32, a1: 0, color: '#1f312b' });
+    this.hooks.punch?.(0.025);
   }
 
-  /** 骑兵普攻：超音速冲阵——五重低空尾焰、路径脉冲与重型震爆。 */
+  /** 骑兵普攻：贴地冲锋。重点是马蹄、尘土、惯性和枪尖碰撞。 */
   cavalryCharge(x: number, y: number, tx: number, ty: number, color: string) {
-    const dx0 = tx - x, dy0 = ty - y;
-    const len = Math.hypot(dx0, dy0) || 1;
-    const dx = dx0 / len, dy = dy0 / len;
-    const px = -dy, py = dx;
-    const edge = '#fb923c';
-    const hot = '#facc15';
-    const core = '#fff7ed';
-
-    this.sourceStamp(x, y, edge, '骑');
-    this.rune(x, y, 0.54, hot, 0.24, 5.5, 0.62);
-    this.flash('#7c2d12', 0.1, 0.12);
-    this.glow(x, y, 0.9, hot, 0.22, 0.72);
-    this.arc(x, y, 0.62, edge, -1.1, 2.0, 0.26, 0.86, Math.atan2(dy, dx), -3.5);
-    this.directional(x, y, tx, ty, edge, 0.12, 0.28);
-    this.cone(x, y, len + 0.45, Math.atan2(dy, dx), 0.42, '#f97316', 0.32, 0.14);
-    for (const off of [-0.42, -0.2, 0, 0.2, 0.42]) {
-      const back = 0.72 + Math.abs(off) * 0.3;
-      this.streak(x + px * off - dx * back, y + py * off - dy * back, tx + px * off, ty + py * off, off === 0 ? core : edge, off === 0 ? 0.2 : 0.07, 0.28, off === 0 ? 1 : 0.68);
-    }
-    for (const k of [0.2, 0.4, 0.6, 0.8]) {
-      const mx = x + dx0 * k, my = y + dy0 * k;
-      this.ring(mx, my, 0.2 + k * 0.14, hot, 0.18, 0.58, 1.8);
-      this.burst(mx, my, hot, 3, 2.8, 0.08, 0.2, 0.6);
-    }
-
-    this.ring(tx, ty, 2.05, edge, 0.38, 0.82, 2.45);
-    this.rays(tx, ty, hot, 2.25, 16, 0.34, Math.atan2(dy, dx));
-    this.cracks(tx, ty, '#c2410c', 1.5, 8, 0.6);
-    this.ring(tx, ty, 1.18, hot, 0.3, 0.86, 2.1);
-    this.arc(tx, ty, 0.8, core, -0.8, Math.PI * 1.45, 0.24, 0.95, Math.atan2(dy, dx), 5);
-    this.glow(tx, ty, 1.35, core, 0.22, 0.94);
-    this.burst(tx, ty, edge, 32, 6.5, 0.2, 0.52, 0.8);
-    this.burst(tx, ty, core, 10, 3.8, 0.13, 0.32);
-    this.cloud(tx, ty, color, 4, 0.52, 0.48);
-    this.cloud(tx, ty, '#3c2b1d', 11, 0.82, 0.86);
-    this.blot(tx, ty, 1.7, '#241a10', 0.95, 0.46);
-    this.hooks.punch?.(0.1);
-    this.hooks.shake?.(0.18, 0.14);
+    this.cavalryWeapon(x, y, tx, ty, color || '#795548', '#f2d2a2');
+    this.hooks.shake?.(0.08, 0.1);
   }
 
   /** 刀兵旧接口保留给英雄/兼容调用。 */
@@ -877,51 +856,40 @@ export class FxEngine {
     this.hooks.shake?.(0.28, 0.18);
   }
 
-  /** 弓兵：量子箭矢出膛——蓄力弧、追踪准星与白热箭芯。 */
+  /** 弓兵：弓身回弹与箭矢离弦，不显示锁定环或能量法阵。 */
   gongShot(x: number, y: number, tx: number, ty: number, color: string, sourceGlyph = '弓') {
     const ang = Math.atan2(ty - y, tx - x);
     const dx = Math.cos(ang), dy = Math.sin(ang);
-    const edge = '#a78bfa';
-    const core = '#fffbea';
-    this.sourceStamp(x, y, edge, sourceGlyph);
-    this.rune(x, y, 0.46, edge, 0.24, -6, 0.58);
-    this.glow(x, y, 0.7, '#c4b5fd', 0.18, 0.72);
-    this.arc(x, y, 0.5, edge, ang - 1.25, 2.5, 0.24, 0.82, 0, -4.5);
-    this.arc(x, y, 0.34, core, ang - 1.05, 0.72, 0.18, 0.9, 0, 5);
-    this.directional(x, y, tx, ty, edge, 0.026, 0.12);
-    this.streak(x, y, x + dx * 0.92, y + dy * 0.92, core, 0.16, 0.15, 0.98);
-    this.streak(x + dx * 0.12, y + dy * 0.12, x + dx * 0.82, y + dy * 0.82, edge, 0.08, 0.2, 0.86);
-    this.streak(x - dy * 0.13, y + dx * 0.13, x + dx * 0.4 - dy * 0.13, y + dy * 0.4 + dx * 0.13, '#fef3c7', 0.045, 0.18, 0.8);
-    this.burst(x, y, edge, 8, 2.2, 0.09, 0.24);
-    this.burst(x, y, color, 4, 1.6, 0.055, 0.18);
-    this.glow(x + dx * 0.54, y + dy * 0.54, 0.46, core, 0.16, 0.82);
+    const px = -dy, py = dx;
+    void sourceGlyph;
+    // 弓臂弯曲轨迹 + 回弹弓弦。
+    this.swoosh(x - dx * 0.04, y - dy * 0.04, 0.52, ang + Math.PI, '#b0895a', 0.2, false, 0.76);
+    this.streak(x - px * 0.29, y - py * 0.29, x + dx * 0.05, y + dy * 0.05, '#e7d7bd', 0.018, 0.18, 0.68);
+    this.streak(x + px * 0.29, y + py * 0.29, x + dx * 0.05, y + dy * 0.05, '#e7d7bd', 0.018, 0.18, 0.68);
+    // 刚离弦的实体箭身。
+    this.streak(x, y, x + dx * 0.78, y + dy * 0.78, '#7c5a36', 0.038, 0.16, 0.9);
+    this.spearHead(x + dx * 0.75, y + dy * 0.75, ang, '#e5e7eb', 0.18, 0.15);
+    this.burst(x - dx * 0.08, y - dy * 0.08, color, 3, 1.5, 0.05, 0.16);
   }
 
-  /** 弓兵：箭矢飞行拖尾；保留真正的飞行弹体，不再是一条瞬移光线。 */
+  /** 弓兵：清晰可见的箭杆、箭头和尾羽。 */
   gongTrail(x: number, y: number, color: string, dx = 0, dy = 0) {
     if (this.disposed) return;
-    this.glowField.emit({ x, y, z: 0.7, life: 0.2, size0: 0.18, size1: 0.025, a0: 1, a1: 0, color: '#c4b5fd' });
-    this.glowField.emit({ x: x - dx * 0.18, y: y - dy * 0.18, z: 0.68, life: 0.26, size0: 0.09, size1: 0.015, a0: 0.72, a1: 0, color });
-    this.inkField.emit({ x: x - dx * 0.3, y: y - dy * 0.3, z: 0.64, vx: -dx * 0.12, vy: -dy * 0.12, life: 0.26, size0: 0.1, size1: 0.02, a0: 0.48, a1: 0, color: '#fff2cf' });
     if (Math.abs(dx) + Math.abs(dy) > 0.1) {
       const px = -dy, py = dx;
-      this.streak(x - dx * 0.3 + px * 0.13, y - dy * 0.3 + py * 0.13, x, y, '#fffbea', 0.045, 0.075, 0.9);
-      this.streak(x - dx * 0.3 - px * 0.13, y - dy * 0.3 - py * 0.13, x, y, color, 0.035, 0.09, 0.68);
+      this.streak(x - dx * 0.5, y - dy * 0.5, x + dx * 0.12, y + dy * 0.12, '#6b4d2e', 0.035, 0.09, 0.94);
+      this.streak(x - dx * 0.4, y - dy * 0.4, x - dx * 0.16 + px * 0.14, y - dy * 0.16 + py * 0.14, color, 0.028, 0.1, 0.78);
+      this.streak(x - dx * 0.4, y - dy * 0.4, x - dx * 0.16 - px * 0.14, y - dy * 0.16 - py * 0.14, color, 0.028, 0.1, 0.78);
+      this.spearHead(x + dx * 0.13, y + dy * 0.13, Math.atan2(dy, dx), '#d6d3d1', 0.14, 0.09);
     }
   }
 
-  /** 弓兵：命中爆点——箭矢穿透后的十字星爆与紫金冲击环。 */
+  /** 弓兵：箭头钉入后只留下短促金属火星和羽尾震颤。 */
   gongImpact(x: number, y: number, color: string) {
-    this.ring(x, y, 0.82, '#a78bfa', 0.28, 0.84, 2.1);
-    this.ring(x, y, 0.44, color, 0.2, 0.58, 1.8);
-    this.arc(x, y, 0.56, '#f5f3ff', -0.9, 1.7, 0.22, 0.95, 0, -6);
-    this.streak(x - 0.66, y, x + 0.66, y, '#fffbea', 0.085, 0.2, 0.96);
-    this.streak(x, y - 0.66, x, y + 0.66, '#c4b5fd', 0.065, 0.22, 0.82);
-    this.streak(x - 0.38, y - 0.38, x + 0.38, y + 0.38, '#ddd6fe', 0.045, 0.2, 0.78);
-    this.burst(x, y, '#a78bfa', 18, 4.1, 0.13, 0.36);
-    this.burst(x, y, '#fffbea', 5, 2.3, 0.08, 0.22);
-    this.glow(x, y, 1.0, '#fff7e6', 0.22, 0.94);
-    this.hooks.punch?.(0.022);
+    this.burst(x, y, '#f5f5f4', 7, 3.4, 0.07, 0.24);
+    this.burst(x, y, color, 4, 2.3, 0.06, 0.2);
+    this.glow(x, y, 0.34, '#fff7ed', 0.12, 0.72);
+    this.inkField.emit({ x, y, z: 0.2, life: 0.38, size0: 0.12, size1: 0.32, a0: 0.25, a1: 0, color: '#3f352b' });
   }
 
   // ---------- 武将技能 ----------
@@ -1247,6 +1215,7 @@ export class FxEngine {
     this.glowTex.dispose();
     this.inkTex.dispose();
     this.beamTex.dispose();
+    this.slashTex.dispose();
     runeTex?.dispose();
     runeTex = null;
     for (const tex of glyphCache.values()) tex.dispose();

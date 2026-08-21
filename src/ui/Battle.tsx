@@ -50,6 +50,7 @@ export function Battle(p: Props) {
   const [poolInfo, setPoolInfo] = useState<Info | null>(null);
   const [drag, setDrag] = useState<{ key: string; x: number; y: number; moved: boolean; tile: PoolTile } | null>(null);
   const dragStart = useRef({ x: 0, y: 0 });
+  const poolTetherStart = useRef({ x: 0, y: 0 });
   const tutRef = useRef(tut);
   tutRef.current = tut;
   const lv = LEVELS[p.levelId];
@@ -140,6 +141,8 @@ export function Battle(p: Props) {
     const unit = gameRef.current?.poolUnits()[idx];
     if (!unit) return;
     dragStart.current = { x: e.clientX, y: e.clientY };
+    const slotRect = e.currentTarget.getBoundingClientRect();
+    poolTetherStart.current = { x: slotRect.left + slotRect.width / 2, y: slotRect.top + slotRect.height / 2 };
     setPoolInfo(null);
     setDrag({ key: tile.key, x: e.clientX, y: e.clientY, moved: false, tile });
     let dragUnit = unit;
@@ -180,6 +183,15 @@ export function Battle(p: Props) {
   const waveCountdown = snap?.inWaveBreak && snap.nextWaveIn <= WAVE_COUNTDOWN_DURATION
     ? Math.max(1, Math.ceil(snap.nextWaveIn))
     : null;
+  const dragTether = drag?.moved ? (() => {
+    const sx = poolTetherStart.current.x, sy = poolTetherStart.current.y;
+    const ex = drag.x, ey = drag.y;
+    const dx = ex - sx, dy = ey - sy, len = Math.hypot(dx, dy) || 1;
+    const bend = Math.min(78, len * 0.16);
+    const cx = (sx + ex) / 2 - (dy / len) * bend;
+    const cy = (sy + ey) / 2 + (dx / len) * bend;
+    return { sx, sy, ex, ey, path: `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}` };
+  })() : null;
 
   return (
     <div className={`battle-shell battle-theme-${lv.chapter} relative flex h-full flex-col overflow-hidden select-none`}>
@@ -355,6 +367,36 @@ export function Battle(p: Props) {
       </div>
 
       {/* 拖拽幽灵 */}
+      {dragTether && drag && (
+        <svg className="battle-dom-tether pointer-events-none fixed inset-0 z-[55] h-full w-full"
+          style={{ '--drag-color': drag.tile.color || '#d8a94a' } as CSSProperties}>
+          <defs>
+            <linearGradient id="drag-energy-gradient" gradientUnits="userSpaceOnUse"
+              x1={dragTether.sx} y1={dragTether.sy} x2={dragTether.ex} y2={dragTether.ey}>
+              <stop offset="0" stopColor="var(--drag-color)" stopOpacity=".18" />
+              <stop offset=".52" stopColor="var(--drag-color)" stopOpacity=".92" />
+              <stop offset="1" stopColor="#fff0bd" stopOpacity="1" />
+            </linearGradient>
+            <filter id="drag-energy-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          <path className="drag-tether-shadow" d={dragTether.path} />
+          <path className="drag-tether-aura" d={dragTether.path} stroke="url(#drag-energy-gradient)" />
+          <path className="drag-tether-core" d={dragTether.path} stroke="url(#drag-energy-gradient)" />
+          <circle className="drag-tether-origin" cx={dragTether.sx} cy={dragTether.sy} r="11" />
+          <circle className="drag-tether-origin-inner" cx={dragTether.sx} cy={dragTether.sy} r="4" />
+          <circle className="drag-tether-target" cx={dragTether.ex} cy={dragTether.ey} r="15" />
+          <circle className="drag-tether-target-inner" cx={dragTether.ex} cy={dragTether.ey} r="5" />
+          <circle className="drag-tether-packet" r="4" filter="url(#drag-energy-glow)">
+            <animateMotion dur=".72s" repeatCount="indefinite" path={dragTether.path} />
+          </circle>
+          <circle className="drag-tether-packet is-secondary" r="2.5" filter="url(#drag-energy-glow)">
+            <animateMotion dur=".72s" begin="-.36s" repeatCount="indefinite" path={dragTether.path} />
+          </circle>
+        </svg>
+      )}
       {drag?.moved && drag.tile.key && (
         <div className="battle-drag-ghost pointer-events-none fixed z-[60]" style={{ left: drag.x - 24, top: drag.y - 24 }}>
           <Piece char={drag.tile.char} color={drag.tile.color} hero={drag.tile.kind === 'hero'} token={drag.tile.kind === 'token'}

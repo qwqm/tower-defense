@@ -376,6 +376,13 @@ export class Game {
   baseHW = 5; baseHH = 7;
   proj: { x: number; y: number; tx: number; ty: number; t: number; dur: number; dmg: number; src: Unit; target: Enemy; color: string; heroKey?: HeroKey }[] = [];
   dragging: Unit | null = null; dragMoved = false; downX = 0; downY = 0; downCell = -1;
+  dragTraceFrom: { x: number; y: number } | null = null;
+  dragTraceTo: { x: number; y: number } | null = null;
+  dragTetherGeo?: THREE.BufferGeometry;
+  dragTetherMat?: THREE.ShaderMaterial;
+  dragTetherMesh?: THREE.Mesh;
+  dragTetherStart?: THREE.Mesh;
+  dragTetherEnd?: THREE.Mesh;
   heroDragPart: 0 | 1 | null = null;
   snapAcc = 0;
   effPool: THREE.Mesh[] = [];
@@ -647,10 +654,28 @@ export class Game {
     const idx: number[] = [];
     const half = w / 2;
     for (let i = 0; i < pts.length; i++) {
+      const curr = pts[i];
       const prev = pts[Math.max(0, i - 1)], next = pts[Math.min(pts.length - 1, i + 1)];
-      let dx = next.x - prev.x, dy = next.y - prev.y;
-      const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-      const nx = -dy * half, ny = dx * half;
+      let ax = curr.x - prev.x, ay = curr.y - prev.y;
+      let bx = next.x - curr.x, by = next.y - curr.y;
+      const al = Math.hypot(ax, ay) || 1, bl = Math.hypot(bx, by) || 1;
+      ax /= al; ay /= al; bx /= bl; by /= bl;
+
+      // 首尾点直接使用当前段法线；拐角使用标准 miter 接合。
+      // 旧算法只取平均切线后偏移 half，90° 转角会缩窄为原宽度的 0.707 倍。
+      let nx: number, ny: number;
+      if (i === 0) {
+        nx = -by * half; ny = bx * half;
+      } else if (i === pts.length - 1) {
+        nx = -ay * half; ny = ax * half;
+      } else {
+        const n0x = -ay, n0y = ax, n1x = -by, n1y = bx;
+        let mx = n0x + n1x, my = n0y + n1y;
+        const ml = Math.hypot(mx, my) || 1; mx /= ml; my /= ml;
+        const projection = Math.max(0.2, mx * n1x + my * n1y);
+        const miterLength = Math.min(half / projection, half * 2.5);
+        nx = mx * miterLength; ny = my * miterLength;
+      }
       verts.push(pts[i].x + nx, pts[i].y + ny, 0, pts[i].x - nx, pts[i].y - ny, 0);
       if (i < pts.length - 1) {
         const a = i * 2;
@@ -661,6 +686,132 @@ export class Game {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     geo.setIndex(idx);
     return geo;
+  }
+
+  /** 创建持久化拖拽能量索，不在 pointermove 中反复分配 Mesh。 */
+  ensureDragTether() {
+    if (this.dragTetherMesh) return;
+    const segments = 32;
+    const positions = new Float32Array((segments + 1) * 2 * 3);
+    const progress = new Float32Array((segments + 1) * 2);
+    const side = new Float32Array((segments + 1) * 2);
+    const indices: number[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      progress[i * 2] = progress[i * 2 + 1] = t;
+      side[i * 2] = -1; side[i * 2 + 1] = 1;
+      if (i < segments) {
+        const a = i * 2;
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aProgress', new THREE.BufferAttribute(progress, 1));
+    geo.setAttribute('aSide', new THREE.BufferAttribute(side, 1));
+    geo.setIndex(indices);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor: { value: new THREE.Color('#e7b85e') },
+      },
+      vertexShader: `
+        attribute float aProgress;
+        attribute float aSide;
+        varying float vProgress;
+        varying float vSide;
+        void main(){
+          vProgress=aProgress; vSide=aSide;
+          gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+        uniform float uTime;
+        uniform vec3 uColor;
+        varying float vProgress;
+        varying float vSide;
+        void main(){
+          float edge=1.0-smoothstep(.18,1.0,abs(vSide));
+          float core=1.0-smoothstep(0.0,.3,abs(vSide));
+          float wave=sin(vProgress*46.0-uTime*9.5);
+          float packet=pow(max(0.0,wave),12.0);
+          float packet2=pow(max(0.0,sin(vProgress*24.0-uTime*5.4+1.8)),18.0);
+          float head=smoothstep(.72,1.0,vProgress);
+          vec3 col=mix(uColor,vec3(1.0,.95,.78),core*.82+packet*.65+head*.32);
+          float alpha=edge*(.16+core*.46+packet*.72+packet2*.46+head*.18);
+          alpha*=smoothstep(0.0,.055,vProgress);
+          gl_FragColor=vec4(col,alpha);
+        }
+      `,
+      transparent: true, depthWrite: false, depthTest: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.z = 4.5; mesh.renderOrder = 900; mesh.frustumCulled = false; mesh.visible = false;
+    this.scene.add(mesh);
+
+    const startMat = new THREE.MeshBasicMaterial({ color: 0xe7b85e, transparent: true, opacity: 0.74,
+      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false });
+    const endMat = new THREE.MeshBasicMaterial({ color: 0xfff1bf, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false });
+    const start = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 36, 1, 0.2, Math.PI * 1.68), startMat);
+    const end = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.24, 36, 1, -0.5, Math.PI * 1.55), endMat);
+    start.position.z = end.position.z = 4.62; start.renderOrder = end.renderOrder = 901;
+    start.visible = end.visible = false; this.scene.add(start, end);
+
+    this.dragTetherGeo = geo; this.dragTetherMat = mat; this.dragTetherMesh = mesh;
+    this.dragTetherStart = start; this.dragTetherEnd = end;
+  }
+
+  showDragTether(from: { x: number; y: number }, color: string) {
+    this.ensureDragTether();
+    this.dragTraceFrom = { ...from }; this.dragTraceTo = { ...from };
+    this.dragTetherMat!.uniforms.uColor.value.set(color);
+    (this.dragTetherStart!.material as THREE.MeshBasicMaterial).color.set(color);
+    this.dragTetherMesh!.visible = this.dragTetherStart!.visible = this.dragTetherEnd!.visible = true;
+    this.updateDragTetherGeometry(performance.now() * 0.001);
+  }
+
+  hideDragTether() {
+    this.dragTraceFrom = this.dragTraceTo = null;
+    if (this.dragTetherMesh) this.dragTetherMesh.visible = false;
+    if (this.dragTetherStart) this.dragTetherStart.visible = false;
+    if (this.dragTetherEnd) this.dragTetherEnd.visible = false;
+  }
+
+  /** 二次贝塞尔能量索：曲率随距离增长，避免僵硬直线。 */
+  updateDragTetherGeometry(visualTime: number) {
+    if (!this.dragTraceFrom || !this.dragTraceTo || !this.dragTetherGeo) return;
+    const from = this.dragTraceFrom, to = this.dragTraceTo;
+    const vx = to.x - from.x, vy = to.y - from.y, len = Math.hypot(vx, vy) || 1;
+    const px = -vy / len, py = vx / len;
+    const bend = Math.min(0.55, len * 0.085) * Math.sin(visualTime * 1.7 + from.x * 0.2);
+    const cx = (from.x + to.x) * 0.5 + px * bend;
+    const cy = (from.y + to.y) * 0.5 + py * bend;
+    const pos = this.dragTetherGeo.attributes.position as THREE.BufferAttribute;
+    const segments = pos.count / 2 - 1;
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments, omt = 1 - t;
+      const qx = omt * omt * from.x + 2 * omt * t * cx + t * t * to.x;
+      const qy = omt * omt * from.y + 2 * omt * t * cy + t * t * to.y;
+      const tx = 2 * omt * (cx - from.x) + 2 * t * (to.x - cx);
+      const ty = 2 * omt * (cy - from.y) + 2 * t * (to.y - cy);
+      const tl = Math.hypot(tx, ty) || 1, nx = -ty / tl, ny = tx / tl;
+      const width = (0.105 - t * 0.035) * (0.94 + Math.sin(visualTime * 4.1 + t * 8) * 0.06);
+      pos.setXYZ(i * 2, qx - nx * width, qy - ny * width, 0);
+      pos.setXYZ(i * 2 + 1, qx + nx * width, qy + ny * width, 0);
+    }
+    pos.needsUpdate = true;
+    this.dragTetherMat!.uniforms.uTime.value = visualTime;
+    this.dragTetherStart!.position.set(from.x, from.y, 4.62);
+    this.dragTetherEnd!.position.set(to.x, to.y, 4.62);
+    this.dragTetherStart!.rotation.z = visualTime * 1.8;
+    this.dragTetherEnd!.rotation.z = -visualTime * 3.1;
+    this.dragTetherStart!.scale.setScalar(0.92 + Math.sin(visualTime * 3.2) * 0.09);
+    this.dragTetherEnd!.scale.setScalar(1 + Math.sin(visualTime * 5.5) * 0.13);
+    const endMat = this.dragTetherEnd!.material as THREE.MeshBasicMaterial;
+    endMat.opacity = 0.68 + Math.sin(visualTime * 6.4) * 0.22;
   }
 
   resize = () => {
@@ -716,6 +867,10 @@ export class Game {
     const u = this.pickUnitAt(w.x, w.y);
     this.downCell = u ? u.loc[0].i : cellAt(w.x, w.y);
     if (u) {
+      const origin = this.unitPos(u);
+      const traceColor = u.kind === 'hero' ? HEROES[u.key as HeroKey].color
+        : u.kind === 'troop' ? TROOPS[u.key as TroopKey].color : '#d8a94a';
+      this.showDragTether(origin, traceColor);
       this.dragging = u;
       this.heroDragPart = u.kind === 'hero' ? (w.x < this.unitPos(u).x ? 0 : 1) : null;
       if (u.kind !== 'hero') {
@@ -742,6 +897,7 @@ export class Game {
       }
     }
     const w = this.toWorld(e.clientX, e.clientY);
+    this.dragTraceTo = { x: w.x, y: w.y };
     this.dragging.mesh.position.set(w.x, w.y, 3);
     if (this.dragging.barMesh) this.dragging.barMesh.position.set(w.x, w.y, 2.9);
     this.highlightDrop(nearestCell(w.x, w.y));
@@ -751,6 +907,7 @@ export class Game {
     if (this.poolDragActive) return;
     const u = this.dragging;
     this.dragging = null;
+    this.hideDragTether();
     this.heroDragPart = null;
     this.clearDropHints();
     try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* */ }
@@ -784,6 +941,7 @@ export class Game {
   onCancel = () => {
     const u = this.dragging;
     this.dragging = null;
+    this.hideDragTether();
     this.heroDragPart = null;
     this.clearDropHints();
     if (u) { u.mesh.scale.set(1, 1, 1); this.settle(u); this.scanAwaken(); }
@@ -1938,6 +2096,7 @@ export class Game {
 
     // 地图环境动画独立于战斗逻辑帧：暂停时也保留极轻微呼吸，画面不会瞬间“死掉”。
     const visualTime = performance.now() * 0.001;
+    this.updateDragTetherGeometry(visualTime);
     if (this.mapShader) this.mapShader.uniforms.uTime.value = visualTime;
     for (const [i, mist] of this.mapMists.entries()) {
       mist.mesh.position.x = mist.x + Math.sin(visualTime * mist.speed + mist.phase) * (1.1 + i * 0.18);
@@ -2095,6 +2254,7 @@ export class Game {
 
   dispose() {
     this.destroyed = true;
+    this.hideDragTether();
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('pointerdown', this.onDown);
@@ -2106,6 +2266,9 @@ export class Game {
       const m = o as THREE.Mesh;
       if (m.geometry) m.geometry.dispose();
     });
+    this.dragTetherMat?.dispose();
+    (this.dragTetherStart?.material as THREE.Material | undefined)?.dispose();
+    (this.dragTetherEnd?.material as THREE.Material | undefined)?.dispose();
     this.renderer.dispose();
     this.fx.dispose();
   }
