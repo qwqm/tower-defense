@@ -170,6 +170,57 @@ button:focus-visible {
 }
 .boss-in { animation: bossIn 1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
+.hero-overlay,
+.boss-overlay {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.hero-overlay::before,
+.boss-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 8% 9%;
+  border: 1px solid rgba(255, 224, 154, 0.28);
+  border-radius: 999px;
+  opacity: 0.55;
+  transform: scale(0.65);
+  animation: sealPulse 1.4s var(--ease-ink) both;
+}
+
+.boss-overlay::before {
+  inset: 5% 4%;
+  border-color: rgba(255, 108, 78, 0.34);
+  animation-duration: 1.8s;
+}
+
+@keyframes sealPulse {
+  0% { opacity: 0; transform: scale(0.65) rotate(-5deg); }
+  34% { opacity: 0.8; }
+  100% { opacity: 0; transform: scale(1.12) rotate(4deg); }
+}
+
+.ink-scan {
+  position: relative;
+}
+.ink-scan::after {
+  content: "";
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: -40%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 226, 164, 0.72), transparent);
+  box-shadow: 0 0 14px rgba(255, 200, 92, 0.72);
+  animation: scan 1.6s ease-in-out infinite;
+}
+
+@keyframes scan {
+  0% { transform: translateY(0); opacity: 0; }
+  18% { opacity: 0.85; }
+  100% { transform: translateY(330px); opacity: 0; }
+}
+
 @keyframes emberFloat {
   0% { transform: translate3d(0, 18px, 0) scale(0.6); opacity: 0; }
   22% { opacity: 0.7; }

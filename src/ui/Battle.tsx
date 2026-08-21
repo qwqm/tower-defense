@@ -343,19 +343,19 @@ export function Battle(p: Props) {
 
       {/* 武将诞生 */}
       {hero && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/35">
+        <div className="hero-overlay pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_center,rgba(128,88,26,0.38),rgba(17,12,8,0.72)_72%)]">
           <div className="hero-burst ink-title text-[130px] leading-none text-[#ffe6a8] drop-shadow-[0_0_28px_rgba(255,180,60,0.85)]">{hero.char}</div>
           <div className="anim-pop mt-2 ink-title text-3xl text-[#fff3d6]">{hero.name} {'★'.repeat(hero.star)}</div>
-          <div className="anim-pop mt-1 text-sm tracking-widest text-[#ffcf8a]">{hero.up ? '将星升华' : `将星降世 · ${hero.skill}`}</div>
+          <div className="ink-scan anim-pop mt-2 rounded-full border border-[#ffcf8a]/40 bg-[#2b1a17]/35 px-4 py-1 text-sm tracking-widest text-[#ffcf8a]">{hero.up ? '将星升华' : `将星降世 · ${hero.skill}`}</div>
         </div>
       )}
 
       {/* Boss 登场 */}
       {boss && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60">
+        <div className="boss-overlay pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_center,rgba(128,24,13,0.42),rgba(14,8,7,0.86)_72%)]">
           <div className="boss-in ink-title text-[150px] leading-none text-[#ff6b52] drop-shadow-[0_0_36px_rgba(255,60,20,0.9)]">{boss.char}</div>
           <div className="anim-pop ink-title text-4xl text-[#ffe1d5]">{boss.name}</div>
-          <div className="anim-pop mt-2 rounded-full border border-[#ff6b52]/60 px-4 py-1 text-sm text-[#ffb9a5]">【{boss.mech}】{boss.desc}</div>
+          <div className="ink-scan anim-pop mt-2 rounded-full border border-[#ff6b52]/60 bg-[#2b1a17]/35 px-4 py-1 text-sm text-[#ffb9a5]">【{boss.mech}】{boss.desc}</div>
         </div>
       )}
 

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 // ============================================================
 
 const MAXP = 1200;
+const glyphCache = new Map<string, THREE.CanvasTexture>();
 
 function makeTex(kind: 'glow' | 'ink'): THREE.CanvasTexture {
   const S = 128;
@@ -39,6 +40,28 @@ function makeTex(kind: 'glow' | 'ink'): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+function makeGlyph(text: string, color: string): THREE.CanvasTexture {
+  const key = `${text}:${color}`;
+  const cached = glyphCache.get(key);
+  if (cached) return cached;
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d')!;
+  g.clearRect(0, 0, S, S);
+  g.font = `900 184px "STKaiti","KaiTi","Songti SC","SimSun",serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.lineWidth = 14;
+  g.strokeStyle = 'rgba(24,16,10,0.72)';
+  g.strokeText(text, S / 2, S / 2 + 8);
+  g.fillStyle = color;
+  g.fillText(text, S / 2, S / 2 + 8);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  glyphCache.set(key, tex);
+  return tex;
 }
 
 export interface EmitOpts {
@@ -188,6 +211,7 @@ export class FxEngine {
   private fades: FadeMesh[] = [];
   private motes: Mote[] = [];
   private respawnT = 0;
+  private environment = 0;
   hooks: FxHooks = {};
 
   constructor(scene: THREE.Scene) {
@@ -202,6 +226,8 @@ export class FxEngine {
   }
 
   setScale(s: number) { this.glowField.setScale(s); this.inkField.setScale(s); }
+
+  setEnvironment(chapter: number) { this.environment = chapter; }
 
   update(dt: number) {
     this.glowField.update(dt);
@@ -231,10 +257,26 @@ export class FxEngine {
       m.life -= dt; m.y += m.vy * dt; m.t -= dt;
       if (m.t <= 0) {
         m.t = 0.5;
+        const moteColor = this.environment === 1 ? '#55727a'
+          : this.environment === 2 ? '#5a3020'
+            : this.environment === 3 ? '#486b7b' : '#4a3d2c';
         this.inkField.emit({
           x: m.x + (Math.random() - 0.5) * 0.4, y: m.y, z: 0.1,
-          life: 2.2, size0: 0.1, size1: 0.34, a0: 0.07, a1: 0, color: '#4a3d2c',
+          life: 2.2, size0: 0.1, size1: 0.34, a0: 0.07, a1: 0, color: moteColor,
         });
+        if (this.environment === 2 && Math.random() < 0.55) {
+          this.glowField.emit({
+            x: m.x, y: m.y - 0.1, z: 0.25, vy: 0.32 + Math.random() * 0.35,
+            life: 0.7 + Math.random() * 0.45, size0: 0.11, size1: 0.02,
+            a0: 0.7, a1: 0, color: Math.random() < 0.5 ? '#f97316' : '#facc15', drag: 0.97,
+          });
+        }
+        if (this.environment === 3 && Math.random() < 0.34) {
+          this.glowField.emit({
+            x: m.x, y: m.y, z: 0.2, vy: -0.12,
+            life: 1.2, size0: 0.08, size1: 0.02, a0: 0.35, a1: 0, color: '#b7e3ec', drag: 0.99,
+          });
+        }
       }
     }
   }
@@ -312,6 +354,32 @@ export class FxEngine {
     m.position.set(x, y, 0.8);
     this.scene.add(m);
     this.fades.push({ mesh: m, mat, life, max: life, baseA, grow: 0.6 });
+  }
+
+  /** 书法字印：用于技能和 Boss 演出的识别锚点。 */
+  glyph(x: number, y: number, text: string, color: string, size = 1.8, life = 0.75, baseA = 0.9) {
+    const mat = new THREE.MeshBasicMaterial({
+      map: makeGlyph(text, color), transparent: true, opacity: baseA,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+    m.position.set(x, y, 1.35);
+    m.rotation.z = (Math.random() - 0.5) * 0.08;
+    this.scene.add(m);
+    this.fades.push({ mesh: m, mat, life, max: life, baseA, grow: 0.35 });
+  }
+
+  /** 不完整的墨环：比完整圆环更接近书法运笔。 */
+  arc(x: number, y: number, r: number, color: string, start = -0.8, span = 1.7, life = 0.4, baseA = 0.75) {
+    const g = new THREE.RingGeometry(r * 0.82, r, 40, 1, start, span);
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.glowTex, color: new THREE.Color(color), transparent: true, opacity: baseA,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const m = new THREE.Mesh(g, mat);
+    m.position.set(x, y, 1.05);
+    this.scene.add(m);
+    this.fades.push({ mesh: m, mat, life, max: life, baseA, grow: 1.2 });
   }
 
   /** 墨迹残留（地面印记） */
@@ -401,10 +469,14 @@ export class FxEngine {
 
   /** 赵云：贯穿光束 */
   zhaoyunBeam(x1: number, y1: number, x2: number, y2: number) {
-    this.streak(x1, y1, x2, y2, '#3b82f6', 0.5, 0.24);
-    this.streak(x1, y1, x2, y2, '#dbeafe', 0.2, 0.3, 1.0);
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    for (let i = -1; i <= 1; i++) {
+      const off = i * 0.12;
+      this.streak(x1 - Math.sin(ang) * off, y1 + Math.cos(ang) * off, x2 - Math.sin(ang) * off, y2 + Math.cos(ang) * off, i === 0 ? '#dbeafe' : '#3b82f6', i === 0 ? 0.2 : 0.1, 0.26, i === 0 ? 1 : 0.7);
+    }
     this.glow(x2, y2, 1.4, '#60a5fa', 0.3, 0.9);
     this.burst(x2, y2, '#93c5fd', 8, 3.6, 0.16, 0.4);
+    this.arc(x2, y2, 0.85, '#bfdbfe', ang - 0.9, 1.8, 0.32, 0.7);
   }
 
   /** 关羽：扇形青龙斩 */
@@ -418,6 +490,8 @@ export class FxEngine {
       }, i * 28);
     }
     this.ring(x, y, r * 0.8, color, 0.45, 0.7, 1.6);
+    this.arc(x, y, r * 0.92, '#6ee7b7', -1.02, 2.04, 0.48, 0.82);
+    this.glyph(x, y, '青', '#a7f3d0', Math.min(2.4, r * 0.62), 0.62, 0.68);
     this.flash('#052e16', 0.22, 0.25);
     this.glow(x, y, r * 0.7, '#10b981', 0.35, 0.5);
   }
@@ -431,6 +505,7 @@ export class FxEngine {
       }, i * 70);
     }
     this.cloud(x, y, '#2f2a24', 14, r * 0.9, 1.1);
+    this.glyph(x, y, '喝', '#f3f4f6', Math.min(2.3, r * 0.7), 0.7, 0.74);
     this.flash('#111827', 0.2, 0.2);
     this.hooks.punch?.(0.1);
     this.hooks.shake?.(0.3, 0.22);
@@ -499,7 +574,7 @@ export class FxEngine {
   }
 
   /** 武将诞生（局内高潮） */
-  heroBorn(x: number, y: number) {
+  heroBorn(x: number, y: number, glyph = '将') {
     this.flash('#fef3c7', 0.55, 0.4);
     this.ring(x, y, 4.2, '#f59e0b', 0.7, 0.9, 2.6);
     this.ring(x, y, 2.4, '#fde68a', 0.5, 0.8, 2.0);
@@ -508,6 +583,7 @@ export class FxEngine {
     this.burst(x, y, '#92400e', 10, 2.6, 0.24, 0.9, 2.5);
     this.cloud(x, y, '#33291c', 18, 1.4, 1.2);
     this.blot(x, y, 3.2, '#1f170e', 1.4, 0.6);
+    this.glyph(x, y, glyph, '#ffe7a8', 2.6, 0.9, 0.8);
     this.hooks.punch?.(0.28);
     this.hooks.shake?.(0.5, 0.45);
   }
@@ -531,15 +607,42 @@ export class FxEngine {
   }
 
   /** Boss 登场 */
-  bossSpawn(x: number, y: number) {
+  bossSpawn(x: number, y: number, glyph = '敌') {
     this.flash('#450a0a', 0.6, 0.5);
     this.ring(x, y, 5.5, '#dc2626', 0.9, 0.95, 2.8);
     this.burst(x, y, '#b91c1c', 55, 8.5, 0.34, 1.0);
     this.burst(x, y, '#fda4af', 18, 4.5, 0.2, 0.7);
     this.cloud(x, y, '#200f0a', 26, 2.4, 1.6);
     this.blot(x, y, 4.6, '#120806', 2.0, 0.75);
+    this.glyph(x, y, glyph, '#ff8d70', 3.0, 1.05, 0.84);
     this.hooks.punch?.(0.34);
     this.hooks.shake?.(0.65, 0.8);
+  }
+
+  /** Boss 技能的视觉锚点：每个机制都有独立颜色、书法字和运动方向。 */
+  bossSkill(x: number, y: number, key: string) {
+    if (key === 'xiahoudun') {
+      this.flash('#7f1d1d', 0.24, 0.26);
+      this.arc(x, y, 2.9, '#f87171', -0.95, 1.9, 0.55, 0.82);
+      this.glyph(x, y, '狂', '#fecaca', 2.4, 0.8, 0.72);
+      this.burst(x, y, '#ef4444', 18, 4.4, 0.16, 0.52);
+    } else if (key === 'zhangliao') {
+      this.streak(x - 2.8, y, x + 3.6, y, '#93c5fd', 0.2, 0.34, 0.8);
+      this.streak(x - 2.8, y + 0.22, x + 3.6, y + 0.22, '#2563eb', 0.1, 0.4, 0.7);
+      this.glyph(x, y, '突', '#bfdbfe', 2.1, 0.72, 0.7);
+      this.burst(x, y, '#60a5fa', 14, 4.2, 0.14, 0.48);
+    } else if (key === 'caoren') {
+      this.ring(x, y, 3.1, '#34d399', 0.62, 0.82, 1.8);
+      this.arc(x, y, 3.35, '#a7f3d0', 0.1, Math.PI * 1.35, 0.7, 0.82);
+      this.glyph(x, y, '壁', '#a7f3d0', 2.35, 0.82, 0.72);
+      this.burst(x, y, '#10b981', 18, 3.4, 0.16, 0.56);
+    } else if (key === 'xuchu') {
+      this.flash('#78350f', 0.24, 0.28);
+      this.ring(x, y, 2.7, '#f59e0b', 0.55, 0.85, 2.1);
+      this.ring(x, y, 4.5, '#fbbf24', 0.75, 0.48, 1.65);
+      this.glyph(x, y, '吼', '#fde68a', 2.65, 0.9, 0.76);
+      this.cloud(x, y, '#3b2014', 16, 1.5, 1.0);
+    }
   }
 
   /** 赤壁火势 */
@@ -566,5 +669,7 @@ export class FxEngine {
     this.fades = [];
     this.glowTex.dispose();
     this.inkTex.dispose();
+    for (const tex of glyphCache.values()) tex.dispose();
+    glyphCache.clear();
   }
 }

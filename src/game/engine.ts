@@ -424,6 +424,7 @@ export class Game {
 
   private initVFX() {
     this.fx = new FxEngine(this.scene);
+    this.fx.setEnvironment(this.level.chapter);
     this.fx.hooks = {
       punch: a => { this.punch = Math.max(this.punch, a); },
       shake: (m, t) => this.shake(m, t),
@@ -1025,7 +1026,7 @@ export class Game {
     const field = this.onField(u);
     if (field) {
       const p = this.unitPos(u);
-      this.fx.heroBorn(p.x, p.y);
+      this.fx.heroBorn(p.x, p.y, def.char);
       this.shake(0.45, 0.3);
     } else {
       this.fx.flash('#fbbf24', 0.3, 0.35);
@@ -1197,7 +1198,7 @@ export class Game {
     this.enemies.push(e);
     if (boss) {
       this.bossRef = e;
-      this.fx.bossSpawn(e.x, e.y);
+      this.fx.bossSpawn(e.x, e.y, def.char);
       sfx('boss'); this.shake(0.6, 0.8); this.pauseFx = 0.9;
       this.opts.onEvent('bossIntro', { name: def.name, char: def.char, mech: def.mech, desc: def.desc });
     }
@@ -1418,6 +1419,7 @@ export class Game {
       if (!e.rage && e.hp / e.maxHp < 0.5) {
         e.rage = true;
         this.opts.onEvent('bossSkill', { name: '拔矢啖睛', desc: '夏侯惇狂化，获得35%减伤！' });
+        this.fx.bossSkill(e.x, e.y, key);
         this.ring(e.x, e.y, 3, '#dc2626', 0.6); this.shake(0.3, 0.3);
       }
     } else if (key === 'caoren') {
@@ -1425,12 +1427,14 @@ export class Game {
         e.mechT = 11;
         e.shield += e.maxHp * 0.12;
         this.opts.onEvent('bossSkill', { name: '铁壁', desc: '曹仁获得护盾！' });
+        this.fx.bossSkill(e.x, e.y, key);
         this.ring(e.x, e.y, 2.6, '#10b981', 0.5);
       }
     } else if (key === 'zhangliao') {
       if (e.mechT <= 0) {
         e.mechT = 12; e.chargeT = 2.5;
         this.opts.onEvent('bossSkill', { name: '突阵冲锋', desc: '张辽向终点疾冲！' });
+        this.fx.bossSkill(e.x, e.y, key);
         this.ring(e.x, e.y, 2.6, '#3b82f6', 0.5); this.shake(0.3, 0.3);
       }
     } else if (key === 'xuchu') {
@@ -1439,6 +1443,7 @@ export class Game {
         const pool = [...this.units].sort(() => Math.random() - 0.5).slice(0, 4);
         pool.forEach(u => { u.stun = 3; const pp = this.unitPos(u); this.ring(pp.x, pp.y, 1.2, '#a16207', 0.4); });
         this.opts.onEvent('bossSkill', { name: '虎痴怒吼', desc: '许褚震慑了部分己方单位！' });
+        this.fx.bossSkill(e.x, e.y, key);
         this.shake(0.4, 0.4);
       }
     }
