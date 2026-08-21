@@ -374,7 +374,7 @@ export class Game {
   fx!: FxEngine;
   punch = 0;
   baseHW = 5; baseHH = 7;
-  proj: { x: number; y: number; tx: number; ty: number; t: number; dur: number; dmg: number; src: Unit; target: Enemy; color: string }[] = [];
+  proj: { x: number; y: number; tx: number; ty: number; t: number; dur: number; dmg: number; src: Unit; target: Enemy; color: string; heroKey?: HeroKey }[] = [];
   dragging: Unit | null = null; dragMoved = false; downX = 0; downY = 0; downCell = -1;
   heroDragPart: 0 | 1 | null = null;
   snapAcc = 0;
@@ -436,33 +436,107 @@ export class Game {
 
   // ---------- 场景 ----------
   boardGroup = new THREE.Group();
+  mapShader?: THREE.ShaderMaterial;
+  mapMists: { mesh: THREE.Mesh; x: number; y: number; speed: number; phase: number }[] = [];
+  pathFlow: { mesh: THREE.Mesh; offset: number; speed: number; phase: number }[] = [];
+  cellPlatforms: THREE.Mesh[] = [];
+  mapEmbers: { mesh: THREE.Mesh; x: number; y: number; speed: number; phase: number }[] = [];
+  horizonLayers: THREE.Mesh[] = [];
+
+  /** 次世代动态战场底材：纸纹、云影、天光和章节色温全部在 GPU 上缓慢流动。 */
+  makeMapMaterial(theme: ChapterVisual) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uTop: { value: new THREE.Color(theme.paperTop) },
+        uMid: { value: new THREE.Color(theme.paperMid) },
+        uBottom: { value: new THREE.Color(theme.paperBottom) },
+        uSun: { value: new THREE.Color(theme.sun) },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
+      `,
+      fragmentShader: `
+        precision highp float;
+        varying vec2 vUv;
+        uniform float uTime;
+        uniform vec3 uTop;
+        uniform vec3 uMid;
+        uniform vec3 uBottom;
+        uniform vec3 uSun;
+        float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
+        float noise(vec2 p){
+          vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+          return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);
+        }
+        float fbm(vec2 p){ float n=0.; n+=noise(p)*.54; p=p*2.03+17.1; n+=noise(p)*.28; p=p*2.11+8.4; n+=noise(p)*.18; return n; }
+        void main(){
+          vec3 col=mix(uBottom,uMid,smoothstep(0.,.52,vUv.y));
+          col=mix(col,uTop,smoothstep(.44,1.,vUv.y));
+          float cloud=fbm(vUv*4.2+vec2(uTime*.018,-uTime*.009));
+          float broad=fbm(vUv*1.7+vec2(-uTime*.006,uTime*.004));
+          col=mix(col,uSun,(cloud-.42)*.15);
+          col*=.93+broad*.12;
+          float sun=exp(-length((vUv-vec2(.25,.82))*vec2(1.,1.35))*5.6);
+          col+=uSun*sun*.16;
+          float fibre=(hash(vec2(floor(vUv.x*620.),floor(vUv.y*900.)))-.5)*.028;
+          col+=fibre;
+          float vignette=smoothstep(.78,.18,length((vUv-.5)*vec2(.86,1.08)));
+          col*=.88+vignette*.12;
+          gl_FragColor=vec4(col,1.);
+        }
+      `,
+      depthWrite: false,
+    });
+    return mat;
+  }
+
+  /** 程序化远山：三层不同深度的山脊，轻微视差让竖屏战场不再像平面棋盘。 */
+  makeHorizonLayer(y: number, color: string, opacity: number, seed: number) {
+    const shape = new THREE.Shape();
+    shape.moveTo(-10, -3);
+    shape.lineTo(-10, 0);
+    const peaks = 18;
+    for (let i = 0; i <= peaks; i++) {
+      const x = -10 + i * 20 / peaks;
+      const h = Math.sin(i * 1.73 + seed) * 0.34 + Math.sin(i * 0.61 + seed * 2) * 0.48 + (i % 3 === 0 ? 0.44 : 0);
+      shape.lineTo(x, h);
+    }
+    shape.lineTo(10, -3); shape.closePath();
+    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({
+      color: new THREE.Color(color), transparent: true, opacity, depthWrite: false,
+    }));
+    mesh.position.set(0, y, -4.78 + this.horizonLayers.length * 0.025);
+    this.scene.add(mesh); this.horizonLayers.push(mesh);
+  }
+
   buildScene() {
     const theme = CHAPTER_VISUALS[this.level.chapter] || CHAPTER_VISUALS[0];
-    // 背景宣纸
-    const bgCv = document.createElement('canvas'); bgCv.width = 64; bgCv.height = 256;
-    const bg = bgCv.getContext('2d')!;
-    const gr = bg.createLinearGradient(0, 0, 0, 256);
-    gr.addColorStop(0, theme.paperTop); gr.addColorStop(0.45, theme.paperMid); gr.addColorStop(0.62, theme.paperMid); gr.addColorStop(1, theme.paperBottom);
-    bg.fillStyle = gr; bg.fillRect(0, 0, 64, 256);
-    for (let i = 0; i < 600; i++) {
-      bg.fillStyle = `rgba(120,100,70,${Math.random() * 0.05})`;
-      bg.fillRect(Math.random() * 64, Math.random() * 256, 1.5, 1.5);
-    }
-    const bgTex = new THREE.CanvasTexture(bgCv);
-    const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ map: bgTex }));
+    // GPU 动态天幕
+    this.mapShader = this.makeMapMaterial(theme);
+    const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), this.mapShader);
     bgMesh.position.z = -5;
     this.scene.add(bgMesh);
+
+    const horizon = this.level.chapter === 2 ? ['#261d1b', '#493329', '#78513b']
+      : this.level.chapter === 1 ? ['#26393e', '#496168', '#71878a']
+        : this.level.chapter === 3 ? ['#284853', '#55747a', '#7d9696'] : ['#514633', '#75684e', '#988766'];
+    this.makeHorizonLayer(4.35, horizon[0], 0.34, 1.3);
+    this.makeHorizonLayer(4.0, horizon[1], 0.22, 3.8);
+    this.makeHorizonLayer(3.72, horizon[2], 0.12, 7.1);
 
     // 远景日晕与薄雾：让战场拥有纸面之外的空气层。
     const sun = new THREE.Mesh(new THREE.CircleGeometry(2.6, 48),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.sun), transparent: true, opacity: 0.12, depthWrite: false }));
     sun.position.set(-3.3, 4.6, -4.85);
     this.scene.add(sun);
-    for (const [x, y, sx, sy] of [[-2.8, 3.7, 4.2, 0.45], [2.4, 1.6, 3.6, 0.34], [-1.1, -2.6, 5.2, 0.3]] as const) {
+    for (const [i, x, y, sx, sy] of [[0, -2.8, 3.7, 4.2, 0.45], [1, 2.4, 1.6, 3.6, 0.34], [2, -1.1, -2.6, 5.2, 0.3], [3, 1.8, -5.1, 4.6, 0.36]] as const) {
       const mist = new THREE.Mesh(new THREE.PlaneGeometry(sx, sy),
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.mist), transparent: true, opacity: 0.12, depthWrite: false }));
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.mist), transparent: true, opacity: 0.1, depthWrite: false, blending: THREE.AdditiveBlending }));
       mist.position.set(x, y, -4.75);
       this.scene.add(mist);
+      this.mapMists.push({ mesh: mist, x, y, speed: 0.08 + i * 0.018, phase: i * 1.7 });
     }
 
     // 道路
@@ -492,6 +566,16 @@ export class Game {
     roadLight.position.z = -3.82;
     this.scene.add(roadLight);
 
+    // 道路战意光脉：光点沿蛇形路线持续前进，直接强化敌军推进方向。
+    const flowColor = this.level.chapter === 2 ? '#fb923c' : this.level.chapter === 3 ? '#67e8f9' : '#ffe6a3';
+    for (let i = 0; i < 18; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(flowColor), transparent: true, opacity: 0.24,
+        blending: THREE.AdditiveBlending, depthWrite: false });
+      const mesh = new THREE.Mesh(new THREE.CircleGeometry(0.055 + (i % 3) * 0.012, 12), mat);
+      mesh.position.z = -3.72; this.scene.add(mesh);
+      this.pathFlow.push({ mesh, offset: i / 18, speed: 0.035 + (i % 4) * 0.003, phase: i * 0.78 });
+    }
+
     // 可布阵地块
     const cellTex = (() => {
       const S = 128; const cv = document.createElement('canvas'); cv.width = cv.height = S;
@@ -511,12 +595,28 @@ export class Game {
     })();
     for (let i = 0; i < BUILD.length; i++) {
       const p = cellPos(i);
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(T * 0.97, T * 0.97),
+      const pedestal = new THREE.Mesh(new THREE.RingGeometry(T * 0.39, T * 0.49, 32),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(i % 2 ? theme.roadLight : theme.sun), transparent: true,
+          opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending }));
+      pedestal.position.set(p.x, p.y, -3.1); pedestal.rotation.z = i * 0.37;
+      this.boardGroup.add(pedestal); this.cellPlatforms.push(pedestal);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(T * 0.94, T * 0.94),
         new THREE.MeshBasicMaterial({ map: cellTex, transparent: true }));
       m.position.set(p.x, p.y, -3);
       this.boardGroup.add(m);
     }
     this.scene.add(this.boardGroup);
+
+    // 风尘/萤火环境层：章节自动切换冷暖色。
+    const emberColor = this.level.chapter === 2 ? '#fb923c' : this.level.chapter === 3 ? '#a5f3fc' : '#f5d68a';
+    for (let i = 0; i < 26; i++) {
+      const mesh = new THREE.Mesh(new THREE.CircleGeometry(0.018 + Math.random() * 0.025, 8),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(emberColor), transparent: true, opacity: 0.25 + Math.random() * 0.35,
+          depthWrite: false, blending: THREE.AdditiveBlending }));
+      const x = (Math.random() - 0.5) * 8, y = -7 + Math.random() * 15;
+      mesh.position.set(x, y, -2.7); this.scene.add(mesh);
+      this.mapEmbers.push({ mesh, x, y, speed: 0.12 + Math.random() * 0.22, phase: Math.random() * Math.PI * 2 });
+    }
 
     // 阿斗（终点营帐）
     const camp = new THREE.Mesh(new THREE.PlaneGeometry(T * 1.7, T * 1.5),
@@ -1267,6 +1367,12 @@ export class Game {
     if (this.atkBuffT > 0) this.atkBuffT -= dt;
     this.updateWaves(dt);
     this.updateEnemies(dt);
+    // 敌军撞到阿斗后会在本帧结束战斗；不要让后续单位、火势和弹道更新继续访问
+    // 已经进入结算态的战场对象，避免死亡/复活/重试之间出现生命周期竞态。
+    if (this.ended) {
+      this.fx.update(dt);
+      return;
+    }
     this.updateUnits(dt);
     this.updateFires(dt);
     this.updateEffects(dt);
@@ -1283,7 +1389,11 @@ export class Game {
       const k = Math.min(1, pr.t / pr.dur);
       const x = pr.x + (pr.tx - pr.x) * k;
       const y = pr.y + (pr.ty - pr.y) * k;
-      this.fx.gongTrail(x, y, pr.color);
+      const dx = pr.tx - pr.x;
+      const dy = pr.ty - pr.y;
+      const len = Math.hypot(dx, dy) || 1;
+      if (pr.heroKey) this.fx.heroProjectileTrail(pr.heroKey, x, y, pr.color, dx / len, dy / len);
+      else this.fx.gongTrail(x, y, pr.color, dx / len, dy / len);
       if (k >= 1) {
         const e = pr.target;
         if (e && this.enemies.includes(e)) this.damage(e, pr.dmg, pr.src);
@@ -1291,7 +1401,8 @@ export class Game {
           const near = this.findTarget(pr.tx, pr.ty, 1.3);
           if (near) this.damage(near, pr.dmg, pr.src);
         }
-        this.fx.gongImpact(pr.tx, pr.ty, pr.color);
+        if (pr.heroKey) this.fx.heroProjectileImpact(pr.heroKey, pr.tx, pr.ty, pr.color);
+        else this.fx.gongImpact(pr.tx, pr.ty, pr.color);
         this.proj.splice(i, 1);
       }
     }
@@ -1571,9 +1682,11 @@ export class Game {
       }
       return;
     }
+    // 武将普攻拥有独立的武器语言；伤害模型仍沿用原有 aoe/pierce/burst/single 判定。
+    if (u.hero) this.fx.heroAttack(u.key, p.x, p.y, target.x, target.y, color);
     switch (st.attack) {
       case 'aoe': {
-        this.fx.daoSlash(p.x, p.y, target.x, target.y, color);
+        if (!u.hero) this.fx.daoSlash(p.x, p.y, target.x, target.y, color);
         for (const e of [...this.enemies]) {
           if (Math.hypot(e.x - target.x, e.y - target.y) <= st.splash) this.damage(e, st.dmg, u);
         }
@@ -1582,7 +1695,7 @@ export class Game {
       case 'pierce': {
         let dx = target.x - p.x, dy = target.y - p.y;
         const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-        this.fx.qiangPierce(p.x, p.y, dx, dy, st.range, color);
+        if (!u.hero) this.fx.qiangPierce(p.x, p.y, dx, dy, st.range, color);
         let n = 0;
         for (const e of [...this.enemies]) {
           const vx = e.x - p.x, vy = e.y - p.y;
@@ -1596,13 +1709,14 @@ export class Game {
         break;
       }
       case 'burst': {
-        this.fx.qiImpact(target.x, target.y, color, p.x, p.y);
+        if (!u.hero) this.fx.qiImpact(target.x, target.y, color, p.x, p.y);
         this.damage(target, st.dmg, u);
         break;
       }
       default: {
-        this.fx.gongShot(p.x, p.y, target.x, target.y, color, u.hero ? HEROES[u.key as HeroKey].char : '弓');
-        this.proj.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, t: 0, dur: 0.18, dmg: st.dmg, src: u, target, color });
+        if (!u.hero) this.fx.gongShot(p.x, p.y, target.x, target.y, color, '弓');
+        this.proj.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, t: 0, dur: u.hero ? 0.22 : 0.18,
+          dmg: st.dmg, src: u, target, color, heroKey: u.hero ? u.key as HeroKey : undefined });
       }
     }
   }
@@ -1615,8 +1729,8 @@ export class Game {
     sfx('skill');
     this.shake(0.22, 0.25);
     this.opts.onEvent('skill', { name: d.name, skill: d.skill, char: d.char, color: d.color });
-    // 先落下施法者签名，再展开方向性轨迹；颜色与字印始终绑定释放者。
-    this.fx.sourceMark(p.x, p.y, d.color, d.char, 1.35);
+    // 先完成压光、阵盘、角色印三段起手，再展开每位武将的独立技能演出。
+    this.fx.skillPrelude(p.x, p.y, d.color, d.char);
     switch (u.key) {
       case 'zhaoyun': {
         for (let i = 0; i < 7; i++) {
@@ -1670,22 +1784,13 @@ export class Game {
         } else {
           this.atkBuff = 0.35; this.atkBuffT = 9;
           this.opts.onEvent('toast', { text: '仁德 · 全军攻击提升35%' });
-          for (const un of this.units) { const pp = this.unitPos(un); this.fx.glow(pp.x, pp.y, 1.4, '#fbbf24', 0.5, 0.5); }
+          this.fx.armyBless(this.units.filter(un => this.onField(un)).map(un => this.unitPos(un)));
         }
         break;
       }
       case 'huangzhong': {
-        this.fx.flash('#78350f', 0.25, 0.3);
-        for (let i = 0; i < 16; i++) {
-          const t = Math.random() * PATH_LEN;
-          const pt = pathPoint(t);
-          setTimeout(() => {
-            if (this.destroyed) return;
-            this.fx.directional(p.x, p.y, pt.x, pt.y, '#f59e0b', 0.045, 0.22);
-            this.fx.gongImpact(pt.x, pt.y, '#b45309');
-            this.fx.blot(pt.x, pt.y, 0.7, '#2b2219', 0.8, 0.4);
-          }, i * 45);
-        }
+        const arrowPoints = Array.from({ length: 20 }, () => pathPoint(Math.random() * PATH_LEN));
+        this.fx.arrowStorm(p.x, p.y, arrowPoints);
         for (const e of [...this.enemies]) this.damage(e, st.dmg * 2.2, u, { bossMul: 1.6 });
         break;
       }
@@ -1830,6 +1935,43 @@ export class Game {
       (this.campGuard.material as THREE.MeshBasicMaterial).opacity = 0.26 + Math.sin(this.time * 2.2) * 0.07;
     }
     if (this.campFlag) this.campFlag.rotation.z = Math.sin(this.time * 1.4) * 0.035;
+
+    // 地图环境动画独立于战斗逻辑帧：暂停时也保留极轻微呼吸，画面不会瞬间“死掉”。
+    const visualTime = performance.now() * 0.001;
+    if (this.mapShader) this.mapShader.uniforms.uTime.value = visualTime;
+    for (const [i, mist] of this.mapMists.entries()) {
+      mist.mesh.position.x = mist.x + Math.sin(visualTime * mist.speed + mist.phase) * (1.1 + i * 0.18);
+      mist.mesh.position.y = mist.y + Math.cos(visualTime * mist.speed * 0.7 + mist.phase) * 0.09;
+      const mat = mist.mesh.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.075 + (Math.sin(visualTime * 0.32 + mist.phase) + 1) * 0.035;
+      mist.mesh.scale.x = 0.94 + Math.sin(visualTime * 0.18 + mist.phase) * 0.08;
+    }
+    for (const flow of this.pathFlow) {
+      const travel = ((visualTime * flow.speed + flow.offset) % 1) * PATH_LEN;
+      const p = pathPoint(travel);
+      flow.mesh.position.x = p.x; flow.mesh.position.y = p.y;
+      const pulse = 0.65 + Math.sin(visualTime * 4.6 + flow.phase) * 0.28;
+      flow.mesh.scale.setScalar(pulse);
+      (flow.mesh.material as THREE.MeshBasicMaterial).opacity = 0.12 + pulse * 0.22;
+    }
+    for (const [i, platform] of this.cellPlatforms.entries()) {
+      const pulse = 1 + Math.sin(visualTime * 1.35 + i * 0.72) * 0.055;
+      platform.scale.setScalar(pulse);
+      platform.rotation.z += dt * (i % 2 ? 0.055 : -0.055);
+      (platform.material as THREE.MeshBasicMaterial).opacity = 0.13 + (Math.sin(visualTime * 1.35 + i * 0.72) + 1) * 0.055;
+    }
+    for (const ember of this.mapEmbers) {
+      let yy = ember.y + ((visualTime * ember.speed + ember.phase) % 15);
+      if (yy > 8) yy -= 15;
+      ember.mesh.position.y = yy;
+      ember.mesh.position.x = ember.x + Math.sin(visualTime * 0.55 + ember.phase) * 0.34;
+      const twinkle = 0.45 + Math.sin(visualTime * 2.2 + ember.phase) * 0.35;
+      ember.mesh.scale.setScalar(Math.max(0.2, twinkle));
+      (ember.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0.08, twinkle * 0.55);
+    }
+    for (const [i, mountain] of this.horizonLayers.entries()) {
+      mountain.position.x = Math.sin(visualTime * (0.025 + i * 0.008) + i) * (0.08 + i * 0.04);
+    }
     this.renderer.render(this.scene, this.camera);
   }
 

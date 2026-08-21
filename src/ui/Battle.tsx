@@ -182,41 +182,50 @@ export function Battle(p: Props) {
     : null;
 
   return (
-    <div className="ink-noise ink-vignette relative flex h-full flex-col overflow-hidden bg-[#f2ebdc] select-none">
+    <div className={`battle-shell battle-theme-${lv.chapter} relative flex h-full flex-col overflow-hidden select-none`}>
       {/* 顶部 */}
-      <div className="battle-hud relative z-20 flex items-center gap-2 border-b border-[#3b3229]/15 px-3 py-2">
+      <div className="battle-hud relative z-20 flex items-center gap-2.5 px-3 py-2.5">
         <button onClick={() => { sfx('click'); setMenu(true); pauseFor(true); }}
-          className="rounded-lg border border-[#3b3229]/15 bg-[#3b3229]/10 px-2.5 py-1.5 text-sm text-[#3b3229] transition hover:bg-[#3b3229]/15 active:scale-95">‖</button>
-        <div>
-          <div className="ink-title text-base leading-none text-[#2c251d]">{lv.chapter + 1}-{lv.index + 1} {lv.name}</div>
-          <div className="flex items-center gap-1.5 text-[11px] text-[#7a6a55]"><span className="h-1.5 w-1.5 rounded-full bg-[#8a2b1f] shadow-[0_0_8px_rgba(138,43,31,0.65)]" />波次 {Math.min(snap?.wave || 1, lv.waves)}/{lv.waves}{snap?.inWaveBreak ? waveCountdown !== null ? ` · 下一波 ${waveCountdown}s` : ' · 整军中' : ''}</div>
+          className="battle-icon-button" aria-label="暂停">Ⅱ</button>
+        <div className="min-w-0">
+          <div className="battle-eyebrow">CHAPTER {String(lv.chapter + 1).padStart(2, '0')} · TACTICAL FIELD</div>
+          <div className="flex items-baseline gap-2">
+            <div className="ink-title truncate text-[17px] leading-none text-[#fff3d5]">{lv.chapter + 1}-{lv.index + 1} {lv.name}</div>
+            <span className="battle-live-dot" />
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[#c9b58f]">
+            <span>波次 {Math.min(snap?.wave || 1, lv.waves)}/{lv.waves}</span>
+            <span className="opacity-40">◆</span>
+            <span>{snap?.inWaveBreak ? waveCountdown !== null ? `敌袭 ${waveCountdown}s` : '阵线整备' : '交战中'}</span>
+          </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => { sfx('click'); gameRef.current?.setSpeed(snap?.speed === 1 ? 2 : 1); }}
-            className="rounded-lg border border-[#3b3229]/15 bg-[#3b3229]/10 px-2 py-1 text-xs text-[#3b3229] transition hover:bg-[#3b3229]/15 active:scale-95">{snap?.speed === 2 ? '2x' : '1x'}</button>
-          <div className="text-right">
-            <div className="text-[10px] leading-none text-[#7a6a55]">阿斗生命</div>
-            <div className="flex items-center gap-1">
-              <div className="relative h-2 w-20 overflow-hidden rounded-full bg-[#3b3229]/15 shadow-inner">
-                <div className="h-full rounded-full transition-all duration-500"
+            className={`battle-speed-button ${snap?.speed === 2 ? 'is-active' : ''}`}>{snap?.speed === 2 ? '×2' : '×1'}</button>
+          <div className="battle-core-status">
+            <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.18em] text-[#c9b58f]"><span>主阵生命</span><span>{Math.round(hpPct * 100)}%</span></div>
+            <div className="mt-1 flex items-center gap-1.5">
+              <div className="battle-health-track">
+                <div className={`battle-health-fill ${hpPct <= 0.25 ? 'is-critical' : hpPct <= 0.5 ? 'is-warning' : ''}`}
                   style={{ width: `${hpPct * 100}%`, background: hpPct > 0.5 ? '#166534' : hpPct > 0.25 ? '#b45309' : '#8a2b1f' }} />
               </div>
-              <span className="w-10 text-xs font-bold text-[#2c251d]">{snap?.adouHp ?? 0}/{snap?.adouMax ?? 0}</span>
+              <span className="min-w-9 text-right text-[11px] font-black text-[#fff1cf]">{snap?.adouHp ?? 0}<span className="opacity-40">/</span>{snap?.adouMax ?? 0}</span>
             </div>
           </div>
         </div>
+        <div className="battle-wave-progress" style={{ '--wave-progress': `${((snap?.wave || 0) / lv.waves) * 100}%` } as CSSProperties} />
       </div>
 
       {/* Boss 血条 */}
       {snap?.boss && (
-        <div className="z-20 bg-gradient-to-r from-[#2b1a17] via-[#452016] to-[#2b1a17] px-3 py-1.5 shadow-[0_4px_18px_rgba(40,20,12,0.28)]">
-          <div className="flex items-center justify-between text-[11px] text-[#f3d7c4]">
-            <span className="ink-title text-sm text-[#ffbfa8]">{snap.boss.name}</span>
-            <span>{snap.boss.mech}{snap.boss.shield > 0 ? ' · 护盾中' : ''}</span>
+        <div className="battle-boss-hud relative z-20 px-3 py-2">
+          <div className="flex items-center justify-between text-[10px] text-[#d9b8aa]">
+            <span className="flex items-center gap-2"><i className="boss-threat-dot" /><b className="ink-title text-[15px] text-[#ffd2c2]">{snap.boss.name}</b><em className="not-italic tracking-[0.14em] text-[#ff7963]">BOSS</em></span>
+            <span className="truncate pl-3">{snap.boss.mech}{snap.boss.shield > 0 ? ' · 能量护盾' : ''}</span>
           </div>
-          <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-black/40">
-            <div className="h-full bg-gradient-to-r from-[#ef4444] via-[#fb6b45] to-[#b91c1c] transition-[width] duration-300" style={{ width: `${(snap.boss.hp / snap.boss.max) * 100}%` }} />
-            {snap.boss.shield > 0 && <div className="-mt-2.5 h-2.5 bg-[#38bdf8]/70" style={{ width: `${Math.min(100, (snap.boss.shield / snap.boss.max) * 100)}%` }} />}
+          <div className="boss-health-track mt-1.5">
+            <div className="boss-health-fill" style={{ width: `${(snap.boss.hp / snap.boss.max) * 100}%` }} />
+            {snap.boss.shield > 0 && <div className="boss-shield-fill" style={{ width: `${Math.min(100, (snap.boss.shield / snap.boss.max) * 100)}%` }} />}
           </div>
         </div>
       )}
@@ -224,11 +233,16 @@ export function Battle(p: Props) {
       {/* 战场 */}
       <div className="battle-stage relative min-h-0 flex-1">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
+        <div className="battle-stage-atmosphere pointer-events-none absolute inset-0" />
+        <div className="battle-stage-frame pointer-events-none absolute inset-2" />
+        <div className="battle-stage-scan pointer-events-none absolute inset-0" />
+        <div className="battle-coordinate pointer-events-none absolute left-3 top-3">FIELD / {String(lv.chapter + 1).padStart(2, '0')}-{String(lv.index + 1).padStart(2, '0')}</div>
 
         {waveCountdown !== null && (
-          <div className="pointer-events-none absolute left-1/2 top-1/3 z-20 -translate-x-1/2 -translate-y-1/2 text-center">
-            <div className="wave-countdown text-sm tracking-[0.35em] text-[#7a5a34]">下一波</div>
-            <div className="wave-countdown ink-title text-7xl leading-none text-[#8a2b1f] drop-shadow-[0_2px_0_rgba(255,255,255,0.8)]">{waveCountdown}</div>
+          <div className="battle-countdown pointer-events-none absolute left-1/2 top-1/3 z-20 -translate-x-1/2 -translate-y-1/2 text-center">
+            <div className="wave-countdown text-[10px] font-bold tracking-[0.5em] text-[#ffe6ad]">INCOMING WAVE</div>
+            <div className="wave-countdown ink-title text-8xl leading-none text-[#fff1cc]">{waveCountdown}</div>
+            <div className="battle-countdown-line" />
           </div>
         )}
 
@@ -255,16 +269,16 @@ export function Battle(p: Props) {
         {/* 单位信息（战场选中 / 池点按） */}
         {(snap?.selected || poolInfo) && (
           <div className="pointer-events-none absolute bottom-1 left-1/2 z-10 w-[94%] -translate-x-1/2">
-            <div className="ink-glass rounded-xl border border-[#3b3229]/20 bg-[#fbf6e9]/90 px-3 py-1.5 text-[11px] text-[#3b3229] shadow">
+            <div className="battle-unit-card px-3 py-2 text-[11px] text-[#f7e8ca]">
               <div className="flex items-center gap-2">
                 {(() => {
                   const s = poolInfo ?? snap!.selected!;
                   return (<>
-                    <b className="ink-title text-sm">{s.name}</b>
-                    <span className="text-[#a8761f]">{s.hero ? '★'.repeat(s.lv) : `${s.lv}阶`}</span>
-                    <span>攻击 {s.dmg}</span>
-                    <span>攻速 {s.aspd}/s</span>
-                    {s.range > 0 && <span>射程 {s.range}</span>}
+                    <b className="ink-title text-[15px] text-[#fff1ce]">{s.name}</b>
+                    <span className="text-[#f6c768]">{s.hero ? '★'.repeat(s.lv) : `${s.lv}阶`}</span>
+                    <span className="battle-stat-chip">攻击 {s.dmg}</span>
+                    <span className="battle-stat-chip">攻速 {s.aspd}/s</span>
+                    {s.range > 0 && <span className="battle-stat-chip">射程 {s.range}</span>}
                   </>);
                 })()}
               </div>
@@ -272,11 +286,11 @@ export function Battle(p: Props) {
                 const s = poolInfo ?? snap!.selected!;
                 return s.skill ? (
                   <div className="mt-0.5 flex items-center gap-1">
-                    <span className="text-[#8a2b1f]">{s.skill}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#3b3229]/15">
-                      <div className="h-full bg-[#8a2b1f]" style={{ width: `${(s.skillPct || 0) * 100}%` }} />
+                    <span className="font-bold text-[#ffb76b]">{s.skill}</span>
+                    <div className="battle-skill-track">
+                      <div className="battle-skill-fill" style={{ width: `${(s.skillPct || 0) * 100}%` }} />
                     </div>
-                    <span>{(s.skillPct || 0) >= 1 ? '就绪' : '充能'}</span>
+                    <span className={(s.skillPct || 0) >= 1 ? 'text-[#86efac]' : 'text-[#b6a98e]'}>{(s.skillPct || 0) >= 1 ? 'READY' : '充能'}</span>
                   </div>
                 ) : null;
               })()}
@@ -286,31 +300,29 @@ export function Battle(p: Props) {
       </div>
 
       {/* 底部：征兵 + 将魂池 */}
-      <div className="battle-pool relative z-20 border-t border-[#3b3229]/15 px-3 pb-3 pt-2">
+      <div className="battle-pool relative z-20 px-3 pb-3 pt-2.5">
         {snap && snap.boons.length > 0 && (
           <div className="mb-1.5 flex gap-1 overflow-x-auto pb-1 text-[10px]">
             {snap.boons.map(b => (
-              <span key={b.id} className="whitespace-nowrap rounded-full bg-[#3b3229]/10 px-2 py-0.5 text-[#3b3229]">{b.name}{b.n > 1 ? ` ×${b.n}` : ''}</span>
+              <span key={b.id} className="battle-boon-chip whitespace-nowrap px-2 py-0.5">{b.name}{b.n > 1 ? ` ×${b.n}` : ''}</span>
             ))}
           </div>
         )}
         <div className="flex items-center gap-3">
-          <div className="shrink-0">
-            <div className="text-[10px] leading-none text-[#7a6a55]">军粮</div>
-            <div className="text-2xl font-bold leading-tight text-[#a8761f]">{snap?.gold ?? 0}</div>
+          <div className="battle-resource shrink-0">
+            <div className="text-[9px] leading-none tracking-[0.18em] text-[#b9a47e]">SUPPLY</div>
+            <div className="text-2xl font-black leading-tight text-[#f6c768]">{snap?.gold ?? 0}</div>
           </div>
           <button
             disabled={!canRecruit}
             onClick={() => { gameRef.current?.recruit(); setPoolInfo(null); }}
-            className={`flex-1 rounded-2xl py-2.5 text-center font-bold tracking-widest transition active:scale-[0.98] ${canRecruit
-              ? 'bg-gradient-to-b from-[#b13a2e] to-[#7d2318] text-[#ffeede] shadow-[0_4px_0_#511208]'
-              : 'bg-[#3b3229]/20 text-[#7a6a55]'} ${tut === 0 ? 'ring-4 ring-[#d8a94a] animate-pulse' : ''}`}>
+            className={`battle-recruit-button flex-1 py-2.5 text-center font-bold tracking-widest ${canRecruit ? 'is-ready' : 'is-disabled'} ${tut === 0 ? 'is-tutorial' : ''}`}>
             <span className="text-base">征 兵</span>
-            <span className="ml-2 text-xs opacity-90">{snap?.cost ?? 0} 粮 · 刷新将魂池</span>
+            <span className="ml-2 text-[10px] opacity-75">{snap?.cost ?? 0} 粮 · 重铸将魂</span>
           </button>
-          <div className="shrink-0 text-right">
-            <div className="text-[10px] leading-none text-[#7a6a55]">军阵</div>
-            <div className="text-lg font-bold text-[#2c251d]">{snap?.boardCount ?? 0}/16</div>
+          <div className="battle-resource shrink-0 text-right">
+            <div className="text-[9px] leading-none tracking-[0.18em] text-[#b9a47e]">FORMATION</div>
+            <div className="text-lg font-black text-[#f7ead0]">{snap?.boardCount ?? 0}<span className="text-xs opacity-35">/16</span></div>
           </div>
         </div>
         <div ref={poolRef} className="mt-2 grid grid-cols-5 gap-1.5">
@@ -319,31 +331,32 @@ export function Battle(p: Props) {
             return (
               <div key={i}
                 onPointerDown={e => onTileDown(e, i, t)}
-                className={`piece-slot flex aspect-square cursor-grab touch-none flex-col items-center justify-center rounded-xl border-2 transition
-                  ${t.key ? 'border-[#8a6d3b]/60 bg-[#fbf6e9]' : 'border-dashed border-[#3b3229]/25 bg-[#e8e0cd]/60'}
+                className={`piece-slot flex aspect-square cursor-grab touch-none flex-col items-center justify-center
+                  ${t.key ? 'is-occupied' : 'is-empty'}
+                  ${t.kind === 'hero' ? 'is-hero' : t.kind === 'token' ? 'is-token' : ''}
                   ${draggingThis ? 'opacity-30' : ''}`}>
                 {t.key ? (
                   <>
                     <Piece char={t.char} color={t.color} hero={t.kind === 'hero'} token={t.kind === 'token'}
                       lv={t.kind !== 'hero' ? t.lv : 0} size={40} />
                     {t.kind === 'hero' && t.part === 0 && (
-                      <div className="mt-0.5 leading-none text-[#d4a12a]">{'★'.repeat(t.lv)}</div>
+                      <div className="mt-0.5 leading-none text-[#ffd56f] drop-shadow-[0_0_6px_rgba(255,204,90,.65)]">{'★'.repeat(t.lv)}</div>
                     )}
-                    {t.kind === 'token' && <div className="mt-0.5 text-[9px] leading-none text-[#8a6d3b]">将魂</div>}
+                    {t.kind === 'token' && <div className="mt-0.5 text-[8px] font-bold leading-none tracking-widest text-[#efc672]">将魂</div>}
                   </>
                 ) : (
-                  <span className="text-[10px] text-[#7a6a55]/60">空</span>
+                  <span className="text-[9px] tracking-[0.18em] text-[#a69579]/40">EMPTY</span>
                 )}
               </div>
             );
           })}
         </div>
-        <div className="mt-1 text-center text-[10px] text-[#7a6a55]">将魂按顺序相邻即可觉醒武将 · 拖动武将任一半可拆分 · 征兵时池中棋子全部销毁</div>
+        <div className="mt-1.5 text-center text-[9px] tracking-[0.04em] text-[#9e8d71]">相邻将魂可觉醒武将 · 拖动武将任一半可拆分 · 征兵将重铸池中棋子</div>
       </div>
 
       {/* 拖拽幽灵 */}
       {drag?.moved && drag.tile.key && (
-        <div className="pointer-events-none fixed z-[60]" style={{ left: drag.x - 24, top: drag.y - 24 }}>
+        <div className="battle-drag-ghost pointer-events-none fixed z-[60]" style={{ left: drag.x - 24, top: drag.y - 24 }}>
           <Piece char={drag.tile.char} color={drag.tile.color} hero={drag.tile.kind === 'hero'} token={drag.tile.kind === 'token'}
             lv={drag.tile.kind !== 'hero' ? drag.tile.lv : 0} size={48} />
         </div>
