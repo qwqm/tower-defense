@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type CSSProperties } from 'react';
 import { Game, type Snapshot, type EndResult } from '../game/engine';
 import { LEVELS } from '../game/data';
 import type { SaveData } from '../game/save';
 import { permMods } from '../game/save';
-import { InkButton, Stars, Card, Piece } from './common';
+import { InkButton, Card, Piece } from './common';
 import { sfx } from '../game/audio';
 
 export interface Reward { merit: number; firstClear: boolean; newAch: string[]; starsBefore: number }
@@ -361,13 +361,13 @@ export function Battle(p: Props) {
 
       {/* 军策 */}
       {boons && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 px-5">
+        <div className="result-backdrop absolute inset-0 z-50 flex flex-col items-center justify-center px-5">
           <div className="ink-title mb-1 text-3xl text-[#ffe6a8]">军 策</div>
           <div className="mb-4 text-xs tracking-widest text-[#d9c8a8]">三选其一，永久生效于本局</div>
           <div className="w-full max-w-[360px] space-y-3">
             {boons.map(b => (
               <button key={b.id} onClick={() => { sfx('star'); gameRef.current?.pickBoon(b.id); setBoons(null); }}
-                className="w-full rounded-2xl border-2 border-[#d8a94a]/60 bg-[#fbf6e9] p-3 text-left transition active:scale-[0.98]">
+                className="luxe-card w-full rounded-2xl border-2 border-[#d8a94a]/60 bg-[#fbf6e9] p-3 text-left transition duration-200 hover:-translate-y-1 hover:border-[#d8a94a] hover:shadow-[0_16px_28px_rgba(216,169,74,0.2)] active:scale-[0.98]">
                 <div className="flex items-center gap-2">
                   <span className="ink-title text-lg text-[#2c251d]">{b.name}</span>
                   <span className="rounded bg-[#3b3229]/10 px-1.5 py-0.5 text-[10px] text-[#6b5b45]">{b.tag}</span>
@@ -381,8 +381,8 @@ export function Battle(p: Props) {
 
       {/* 暂停菜单 */}
       {menu && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 px-8">
-          <Card className="w-full max-w-[320px]">
+        <div className="result-backdrop absolute inset-0 z-50 flex items-center justify-center px-8">
+          <Card className="result-panel w-full max-w-[320px]">
             <div className="ink-title mb-3 text-center text-2xl text-[#2c251d]">暂 停</div>
             <div className="mb-3 text-center text-xs text-[#6b5b45]">{lv.chapter + 1}-{lv.index + 1} {lv.name} · 击杀 {snap?.kills ?? 0}</div>
             <div className="space-y-2">
@@ -396,9 +396,10 @@ export function Battle(p: Props) {
 
       {/* 失败 / 复活 */}
       {dead && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 px-6">
-          <Card className="w-full max-w-[340px] text-center">
-            <div className="ink-title text-3xl text-[#8a2b1f]">阿 斗 危 矣</div>
+        <div className="result-backdrop absolute inset-0 z-50 flex items-center justify-center px-6">
+          <Card className="result-panel w-full max-w-[340px] text-center">
+            <div className="relative z-10 mb-1 text-[10px] tracking-[0.28em] text-[#8a2b1f]">BATTLE LOST · 战线告急</div>
+            <div className="relative z-10 ink-title text-3xl text-[#8a2b1f]">阿 斗 危 矣</div>
             <div className="mt-2 text-sm text-[#3b3229]">坚持到第 {dead.wave} 波 · 击杀 {dead.kills}</div>
             <div className="text-sm text-[#3b3229]">最强单位：{dead.bestHero ? `${dead.bestHero.name}（${dead.bestHero.kills}杀）` : '无'}</div>
             <div className="mt-4 space-y-2">
@@ -415,35 +416,22 @@ export function Battle(p: Props) {
 
       {/* 结算 */}
       {result && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 px-5">
-          <Card className="w-full max-w-[350px]">
-            <div className={`ink-title text-center text-4xl ${result.res.win ? 'text-[#8a2b1f]' : 'text-[#3b3229]'}`}>
-              {result.res.win ? '大 获 全 胜' : '力 战 不 支'}
+        <div className={`result-backdrop ${result.res.win ? 'result-win' : ''} absolute inset-0 z-50 flex items-center justify-center px-5`}>
+          <Card className="result-panel w-full max-w-[360px]">
+            <div className="relative z-10 text-center"><div className={`text-[10px] tracking-[0.28em] ${result.res.win ? 'text-[#a8761f]' : 'text-[#8a2b1f]'}`}>{result.res.win ? 'VICTORY REPORT · 战果回收' : 'DEFEAT REPORT · 战线总结'}</div><div className={`ink-title mt-1 text-4xl ${result.res.win ? 'text-[#8a2b1f]' : 'text-[#3b3229]'}`}>{result.res.win ? '大 获 全 胜' : '力 战 不 支'}</div></div>
+            {result.res.win && <div className="relative z-10 mt-3 flex justify-center gap-1.5">{[0, 1, 2].map(i => <svg key={i} style={{ '--star': i } as CSSProperties} width="38" height="38" viewBox="0 0 24 24" className={`result-star ${i < result.res.stars ? 'text-[#d8a94a]' : 'text-[#3b3229]/15'}`} fill="currentColor"><path d="M12 2l2.9 6.2 6.6.9-4.8 4.6 1.2 6.6L12 17.2 6.1 20.3l1.2-6.6L2.5 9.1l6.6-.9z" /></svg>)}</div>}
+            <div className="relative z-10 mt-4 grid grid-cols-2 gap-2">
+              <ResultMetric k="坚持波次" v={`${result.res.wave} / ${lv.waves}`} />
+              <ResultMetric k="击杀数量" v={String(result.res.kills)} />
+              <ResultMetric k="最强单位" v={result.res.bestHero ? `${result.res.bestHero.name} · ${result.res.bestHero.kills}杀` : '无'} />
+              <ResultMetric k="阿斗生命" v={`${result.res.adouHp} / ${result.res.adouMax}`} />
+              <ResultMetric k="剩余军粮" v={String(result.res.goldLeft)} />
+              <ResultMetric k="用时" v={`${Math.floor(result.res.timeSec / 60)}分${result.res.timeSec % 60}秒`} />
             </div>
-            {result.res.win && (
-              <div className="mt-2 flex justify-center"><Stars n={result.res.stars} size={34} /></div>
-            )}
-            <div className="mt-3 space-y-1 text-sm text-[#3b3229]">
-              <Row k="坚持波次" v={`${result.res.wave} / ${lv.waves}`} />
-              <Row k="击杀数量" v={String(result.res.kills)} />
-              <Row k="最强单位" v={result.res.bestHero ? `${result.res.bestHero.name}（${result.res.bestHero.kills}杀）` : '无'} />
-              <Row k="阿斗生命" v={`${result.res.adouHp} / ${result.res.adouMax}`} />
-              <Row k="剩余军粮" v={String(result.res.goldLeft)} />
-              <Row k="用时" v={`${Math.floor(result.res.timeSec / 60)}分${result.res.timeSec % 60}秒`} />
-              <Row k="获得军功" v={`+${result.rw.merit}`} gold />
-              {result.rw.firstClear && <Row k="首通奖励" v="已发放" gold />}
-            </div>
-            {result.res.win && (
-              <div className="mt-2 text-[11px] text-[#6b5b45]">
-                ★二：通关时阿斗生命 ≥ 60%　★三：不使用复活
-              </div>
-            )}
-            {result.rw.newAch.length > 0 && (
-              <div className="mt-2 rounded-lg bg-[#fdf3dc] p-2 text-xs text-[#a8761f]">
-                达成成就：{result.rw.newAch.join('、')}
-              </div>
-            )}
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="relative z-10 mt-3 flex items-center justify-between rounded-xl border border-[#d8a94a]/35 bg-[#fdf3dc]/75 px-3 py-2"><span className="text-xs text-[#7a6a55]">本局军功</span><b className="text-xl text-[#a8761f]">+{result.rw.merit}</b>{result.rw.firstClear && <span className="rounded-full bg-[#a8761f]/15 px-2 py-0.5 text-[10px] text-[#a8761f]">首通奖励</span>}</div>
+            {result.res.win && <div className="relative z-10 mt-2 text-center text-[10px] text-[#6b5b45]">★二：阿斗生命 ≥ 60%　·　★三：不使用复活</div>}
+            {result.rw.newAch.length > 0 && <div className="relative z-10 mt-2 rounded-lg bg-[#fdf3dc] p-2 text-center text-xs text-[#a8761f]">达成军功：{result.rw.newAch.join(' · ')}</div>}
+            <div className="relative z-10 mt-4 grid grid-cols-2 gap-2">
               {result.res.win && p.levelId < 23
                 ? <InkButton variant="gold" onClick={p.onNext}>下一关</InkButton>
                 : <InkButton variant="gold" onClick={p.onRetry}>再次挑战</InkButton>}
@@ -460,11 +448,6 @@ export function Battle(p: Props) {
   );
 }
 
-function Row({ k, v, gold }: { k: string; v: string; gold?: boolean }) {
-  return (
-    <div className="flex justify-between border-b border-dashed border-[#3b3229]/15 pb-0.5">
-      <span className="text-[#7a6a55]">{k}</span>
-      <span className={gold ? 'font-bold text-[#a8761f]' : 'font-semibold'}>{v}</span>
-    </div>
-  );
+function ResultMetric({ k, v }: { k: string; v: string }) {
+  return <div className="result-metric"><div className="result-metric-label">{k}</div><div className="result-metric-value truncate">{v}</div></div>;
 }
