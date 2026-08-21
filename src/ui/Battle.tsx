@@ -174,23 +174,23 @@ export function Battle(p: Props) {
     : null;
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#f2ebdc] select-none">
+    <div className="ink-noise ink-vignette relative flex h-full flex-col overflow-hidden bg-[#f2ebdc] select-none">
       {/* 顶部 */}
-      <div className="z-20 flex items-center gap-2 border-b border-[#3b3229]/15 bg-[#efe6d2]/95 px-3 py-2">
+      <div className="battle-hud relative z-20 flex items-center gap-2 border-b border-[#3b3229]/15 px-3 py-2">
         <button onClick={() => { sfx('click'); setMenu(true); pauseFor(true); }}
-          className="rounded-lg bg-[#3b3229]/10 px-2.5 py-1.5 text-sm text-[#3b3229]">‖</button>
+          className="rounded-lg border border-[#3b3229]/15 bg-[#3b3229]/10 px-2.5 py-1.5 text-sm text-[#3b3229] transition hover:bg-[#3b3229]/15 active:scale-95">‖</button>
         <div>
           <div className="ink-title text-base leading-none text-[#2c251d]">{lv.chapter + 1}-{lv.index + 1} {lv.name}</div>
-          <div className="text-[11px] text-[#7a6a55]">波次 {Math.min(snap?.wave || 1, lv.waves)}/{lv.waves}{snap?.inWaveBreak ? waveCountdown !== null ? ` · 下一波 ${waveCountdown}s` : ' · 整军中' : ''}</div>
+          <div className="flex items-center gap-1.5 text-[11px] text-[#7a6a55]"><span className="h-1.5 w-1.5 rounded-full bg-[#8a2b1f] shadow-[0_0_8px_rgba(138,43,31,0.65)]" />波次 {Math.min(snap?.wave || 1, lv.waves)}/{lv.waves}{snap?.inWaveBreak ? waveCountdown !== null ? ` · 下一波 ${waveCountdown}s` : ' · 整军中' : ''}</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => { sfx('click'); gameRef.current?.setSpeed(snap?.speed === 1 ? 2 : 1); }}
-            className="rounded-lg bg-[#3b3229]/10 px-2 py-1 text-xs text-[#3b3229]">{snap?.speed === 2 ? '2x' : '1x'}</button>
+            className="rounded-lg border border-[#3b3229]/15 bg-[#3b3229]/10 px-2 py-1 text-xs text-[#3b3229] transition hover:bg-[#3b3229]/15 active:scale-95">{snap?.speed === 2 ? '2x' : '1x'}</button>
           <div className="text-right">
             <div className="text-[10px] leading-none text-[#7a6a55]">阿斗生命</div>
             <div className="flex items-center gap-1">
-              <div className="h-2 w-20 overflow-hidden rounded-full bg-[#3b3229]/15">
-                <div className="h-full rounded-full transition-all"
+              <div className="relative h-2 w-20 overflow-hidden rounded-full bg-[#3b3229]/15 shadow-inner">
+                <div className="h-full rounded-full transition-all duration-500"
                   style={{ width: `${hpPct * 100}%`, background: hpPct > 0.5 ? '#166534' : hpPct > 0.25 ? '#b45309' : '#8a2b1f' }} />
               </div>
               <span className="w-10 text-xs font-bold text-[#2c251d]">{snap?.adouHp ?? 0}/{snap?.adouMax ?? 0}</span>
@@ -201,26 +201,26 @@ export function Battle(p: Props) {
 
       {/* Boss 血条 */}
       {snap?.boss && (
-        <div className="z-20 bg-[#2b1a17]/95 px-3 py-1.5">
+        <div className="z-20 bg-gradient-to-r from-[#2b1a17] via-[#452016] to-[#2b1a17] px-3 py-1.5 shadow-[0_4px_18px_rgba(40,20,12,0.28)]">
           <div className="flex items-center justify-between text-[11px] text-[#f3d7c4]">
             <span className="ink-title text-sm text-[#ffbfa8]">{snap.boss.name}</span>
             <span>{snap.boss.mech}{snap.boss.shield > 0 ? ' · 护盾中' : ''}</span>
           </div>
           <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-black/40">
-            <div className="h-full bg-gradient-to-r from-[#ef4444] to-[#b91c1c]" style={{ width: `${(snap.boss.hp / snap.boss.max) * 100}%` }} />
+            <div className="h-full bg-gradient-to-r from-[#ef4444] via-[#fb6b45] to-[#b91c1c] transition-[width] duration-300" style={{ width: `${(snap.boss.hp / snap.boss.max) * 100}%` }} />
             {snap.boss.shield > 0 && <div className="-mt-2.5 h-2.5 bg-[#38bdf8]/70" style={{ width: `${Math.min(100, (snap.boss.shield / snap.boss.max) * 100)}%` }} />}
           </div>
         </div>
       )}
 
       {/* 战场 */}
-      <div className="relative min-h-0 flex-1">
+      <div className="battle-stage relative min-h-0 flex-1">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
 
         {waveCountdown !== null && (
           <div className="pointer-events-none absolute left-1/2 top-1/3 z-20 -translate-x-1/2 -translate-y-1/2 text-center">
-            <div className="text-sm tracking-[0.35em] text-[#7a5a34]">下一波</div>
-            <div className="ink-title text-7xl leading-none text-[#8a2b1f] drop-shadow-[0_2px_0_rgba(255,255,255,0.8)]">{waveCountdown}</div>
+            <div className="wave-countdown text-sm tracking-[0.35em] text-[#7a5a34]">下一波</div>
+            <div className="wave-countdown ink-title text-7xl leading-none text-[#8a2b1f] drop-shadow-[0_2px_0_rgba(255,255,255,0.8)]">{waveCountdown}</div>
           </div>
         )}
 
@@ -238,7 +238,7 @@ export function Battle(p: Props) {
         {/* 提示 */}
         <div className="pointer-events-none absolute left-1/2 top-14 z-10 flex -translate-x-1/2 flex-col items-center gap-1">
           {toasts.map(t => (
-            <div key={t.id} className="anim-pop rounded-full bg-[#2b1a17]/85 px-3 py-1 text-center text-xs text-[#f7e6cf]">
+            <div key={t.id} className="toast-in rounded-full border border-[#ffcf8a]/20 bg-[#2b1a17]/88 px-3 py-1 text-center text-xs text-[#f7e6cf] shadow-[0_6px_18px_rgba(45,26,16,0.2)]">
               <b className="text-[#ffcf8a]">{t.text}</b>{t.sub ? <span className="ml-1 opacity-80">{t.sub}</span> : null}
             </div>
           ))}
@@ -247,7 +247,7 @@ export function Battle(p: Props) {
         {/* 单位信息（战场选中 / 池点按） */}
         {(snap?.selected || poolInfo) && (
           <div className="pointer-events-none absolute bottom-1 left-1/2 z-10 w-[94%] -translate-x-1/2">
-            <div className="rounded-xl border border-[#3b3229]/20 bg-[#fbf6e9]/95 px-3 py-1.5 text-[11px] text-[#3b3229] shadow">
+            <div className="ink-glass rounded-xl border border-[#3b3229]/20 bg-[#fbf6e9]/90 px-3 py-1.5 text-[11px] text-[#3b3229] shadow">
               <div className="flex items-center gap-2">
                 {(() => {
                   const s = poolInfo ?? snap!.selected!;
@@ -278,7 +278,7 @@ export function Battle(p: Props) {
       </div>
 
       {/* 底部：征兵 + 将魂池 */}
-      <div className="z-20 border-t border-[#3b3229]/15 bg-[#efe6d2]/95 px-3 pb-3 pt-2">
+      <div className="battle-pool relative z-20 border-t border-[#3b3229]/15 px-3 pb-3 pt-2">
         {snap && snap.boons.length > 0 && (
           <div className="mb-1.5 flex gap-1 overflow-x-auto pb-1 text-[10px]">
             {snap.boons.map(b => (
@@ -311,7 +311,7 @@ export function Battle(p: Props) {
             return (
               <div key={i}
                 onPointerDown={e => onTileDown(e, i, t)}
-                className={`flex aspect-square cursor-grab touch-none flex-col items-center justify-center rounded-xl border-2 transition
+                className={`piece-slot flex aspect-square cursor-grab touch-none flex-col items-center justify-center rounded-xl border-2 transition
                   ${t.key ? 'border-[#8a6d3b]/60 bg-[#fbf6e9]' : 'border-dashed border-[#3b3229]/25 bg-[#e8e0cd]/60'}
                   ${draggingThis ? 'opacity-30' : ''}`}>
                 {t.key ? (

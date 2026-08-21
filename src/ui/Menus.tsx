@@ -19,8 +19,10 @@ export function Home({ save, go }: { save: SaveData; go: (s: string) => void }) 
     ? Math.min(100, ((stars - rank.stars) / (nx.stars - rank.stars)) * 100)
     : 100;
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#f0e7d2]">
-      <div className="ink-bg pointer-events-none absolute inset-0" />
+    <div className="ink-noise ink-vignette relative flex h-full flex-col overflow-hidden bg-[#f0e7d2]">
+      <div className="ink-bg ink-radial-glow pointer-events-none absolute inset-0" />
+      <div className="drift-cloud pointer-events-none absolute -left-[18%] top-[14%] h-40 w-[136%] rounded-[50%] bg-[#fff4d8]/25 blur-3xl" />
+      <div className="drift-cloud pointer-events-none absolute -right-[22%] bottom-[18%] h-44 w-[120%] rounded-[50%] bg-[#8a2b1f]/[0.07] blur-3xl" style={{ animationDelay: '-6s' }} />
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {[...Array(7)].map((_, i) => (
           <div key={i} className="float-ink absolute font-serif text-[#3b3229]/10"
@@ -33,11 +35,14 @@ export function Home({ save, go }: { save: SaveData; go: (s: string) => void }) 
       </div>
 
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
-        <div className="ink-seal mb-1 text-[13px] tracking-[0.6em] text-[#8a2b1f]">建安十三年</div>
-        <h1 className="ink-title text-[62px] leading-[1.05] text-[#241d16] drop-shadow-[0_2px_0_rgba(255,255,255,0.5)]">长坂护主</h1>
-        <div className="mt-1 text-sm tracking-[0.35em] text-[#6b5b45]">汉字合成 · 军阵塔防</div>
+        <div className="seal-stamp ink-seal mb-2 rounded-sm border border-[#8a2b1f]/35 px-2 py-0.5 text-[13px] tracking-[0.6em] text-[#8a2b1f]">建安十三年</div>
+        <div className="relative">
+          <div className="pointer-events-none absolute -inset-x-4 bottom-1 h-3 rotate-[-2deg] rounded-[50%] bg-[#a8761f]/15 blur-md" />
+          <h1 className="ink-title ink-reveal relative text-[62px] leading-[1.05] text-[#241d16] drop-shadow-[0_2px_0_rgba(255,255,255,0.5)]">长坂护主</h1>
+        </div>
+        <div className="mt-2 flex items-center gap-2 text-sm tracking-[0.35em] text-[#6b5b45]"><span className="ink-rule w-8" />汉字合成 · 军阵塔防<span className="ink-rule w-8" /></div>
 
-        <Card className="mt-7 w-full max-w-[330px] !bg-[#fbf6e9]/90">
+        <Card className="ink-glass mt-7 w-full max-w-[330px] !bg-[#fbf6e9]/80">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs text-[#7a6a55]">当前军衔</div>
@@ -48,8 +53,8 @@ export function Home({ save, go }: { save: SaveData; go: (s: string) => void }) 
               <div className="text-2xl font-bold text-[#a8761f]">{save.merit}</div>
             </div>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#3b3229]/10">
-            <div className="h-full rounded-full bg-[#a8761f]"
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#3b3229]/10">
+            <div className="h-full rounded-full bg-gradient-to-r from-[#8a2b1f] via-[#d8a94a] to-[#f5d880] shadow-[0_0_12px_rgba(216,169,74,0.45)] transition-[width] duration-700"
               style={{ width: `${rankProgress}%` }} />
           </div>
           <div className="mt-1 text-[11px] text-[#7a6a55]">
@@ -59,7 +64,7 @@ export function Home({ save, go }: { save: SaveData; go: (s: string) => void }) 
       </div>
 
       <div className="relative z-10 grid grid-cols-2 gap-2.5 px-6 pb-8">
-        <InkButton variant="danger" className="col-span-2 !py-4 text-xl" onClick={() => go('levels')}>开 始 征 战</InkButton>
+        <InkButton variant="danger" className="pulse-ink col-span-2 !py-4 text-xl" onClick={() => go('levels')}>开 始 征 战</InkButton>
         <InkButton variant="gold" onClick={() => go('upgrade')}>强化</InkButton>
         <InkButton onClick={() => go('codex')}>图鉴</InkButton>
         <InkButton onClick={() => go('ach')}>成就</InkButton>
@@ -86,7 +91,7 @@ export function LevelSelect({ save, onBack, onPlay }: { save: SaveData; onBack: 
           const lk = stars < c.unlockStars;
           return (
             <button key={c.id} onClick={() => { sfx('click'); setCh(c.id); }}
-              className={`rounded-xl border px-1 py-2 text-center transition ${ch === c.id ? 'border-[#8a2b1f] bg-[#8a2b1f] text-[#f7ecd8]' : 'border-[#3b3229]/20 bg-[#fbf6e9] text-[#3b3229]'}`}>
+              className={`rounded-xl border px-1 py-2 text-center transition duration-200 hover:-translate-y-0.5 active:scale-95 ${ch === c.id ? 'border-[#8a2b1f] bg-gradient-to-b from-[#a23b2a] to-[#742217] text-[#f7ecd8] shadow-[0_5px_12px_rgba(111,34,22,0.22)]' : 'border-[#3b3229]/20 bg-[#fbf6e9]/80 text-[#3b3229] shadow-[0_3px_10px_rgba(60,45,25,0.06)]'}`}>
               <div className="ink-title text-lg">{c.name}</div>
               <div className="text-[10px] opacity-70">{lk ? `★${c.unlockStars}` : '已开启'}</div>
             </button>
@@ -94,7 +99,7 @@ export function LevelSelect({ save, onBack, onPlay }: { save: SaveData; onBack: 
         })}
       </div>
 
-      <Card className="mb-3">
+      <Card className="ink-glass mb-3">
         <div className="flex items-baseline justify-between">
           <div className="ink-title text-lg text-[#2c251d]">{chap.sub}</div>
           <div className="text-sm text-[#a8761f]">★ {chStars}/18</div>
@@ -110,9 +115,9 @@ export function LevelSelect({ save, onBack, onPlay }: { save: SaveData; onBack: 
           const s = save.stars[l.id];
           return (
             <button key={l.id} disabled={!un} onClick={() => { sfx('click'); onPlay(l.id); }}
-              className={`rounded-2xl border p-3 text-left transition active:scale-[0.98] ${un ? 'border-[#3b3229]/20 bg-[#fbf6e9]' : 'border-[#3b3229]/10 bg-[#e8e0cd] opacity-60'}`}>
+              className={`group rounded-2xl border p-3 text-left transition duration-200 hover:-translate-y-0.5 active:scale-[0.98] ${un ? 'border-[#3b3229]/20 bg-[#fbf6e9]/90 shadow-[0_4px_12px_rgba(60,45,25,0.07)] hover:border-[#a8761f]/60 hover:shadow-[0_10px_18px_rgba(60,45,25,0.12)]' : 'border-[#3b3229]/10 bg-[#e8e0cd] opacity-60'}`}>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-[#7a6a55]">{l.chapter + 1}-{l.index + 1}</span>
+                <span className="text-xs text-[#7a6a55] transition-colors group-hover:text-[#8a2b1f]">{l.chapter + 1}-{l.index + 1}</span>
                 {l.boss && <span className="rounded bg-[#8a2b1f] px-1.5 py-0.5 text-[10px] text-[#ffeede]">BOSS</span>}
               </div>
               <div className="ink-title mt-0.5 text-lg text-[#2c251d]">{l.name}</div>

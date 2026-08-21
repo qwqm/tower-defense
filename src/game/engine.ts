@@ -52,6 +52,19 @@ export const ADOU_POS = { x: colX(0), y: rowY(8) - T * 0.95 };
 export const CAM_CENTER_Y = (rowY(0) + T * 1.2 + ADOU_POS.y - T * 0.7) / 2;
 const PATH_SPEED_SCALE = 0.49;
 
+type ChapterVisual = {
+  paperTop: string; paperMid: string; paperBottom: string;
+  base: string; road: string; roadEdge: string; roadLight: string;
+  sun: string; mist: string;
+};
+
+const CHAPTER_VISUALS: ChapterVisual[] = [
+  { paperTop: '#dfd2b5', paperMid: '#f2ebdc', paperBottom: '#d8c7a5', base: '#d8c9a9', road: '#c4b18b', roadEdge: '#6e6049', roadLight: '#e4d3ac', sun: '#f4d58e', mist: '#f7edcf' },
+  { paperTop: '#b7c3c4', paperMid: '#d8dfd8', paperBottom: '#83949b', base: '#9cacad', road: '#87918d', roadEdge: '#3d4a50', roadLight: '#c1c9bc', sun: '#c8d9d0', mist: '#e7eee8' },
+  { paperTop: '#4e4440', paperMid: '#77604d', paperBottom: '#302724', base: '#655143', road: '#806348', roadEdge: '#2b211d', roadLight: '#ba8250', sun: '#d47b43', mist: '#c49b73' },
+  { paperTop: '#93a9b0', paperMid: '#d0d8d2', paperBottom: '#627985', base: '#9bb1b2', road: '#9aa69d', roadEdge: '#344957', roadLight: '#d6ddd0', sun: '#bfd7d2', mist: '#e1ece6' },
+];
+
 function cellPos(cell: number) {
   const b = BUILD[cell];
   return { x: colX(b.c), y: rowY(b.r) };
@@ -348,7 +361,7 @@ export class Game {
   mods: Mods = newMods();
   boons: Record<string, number> = {};
   time = 0; speed = 1; paused = false; ended = false; revived = false;
-  pauseFx = 0; shakeT = 0; shakeMag = 0;
+  pauseFx = 0; shakeT = 0; shakeMag = 0; shakePhase = 0;
   atkBuff = 0; atkBuffT = 0;
   fireTimer = 12;
   seenEnemies = new Set<string>(); seenBoss = new Set<string>();
@@ -369,6 +382,8 @@ export class Game {
   destroyed = false;
   heroKillNames: Record<string, number> = {};
   peakHeroCount = 0; taoyuan = false; wuhu = false; maxHeroKills = 0;
+  campGuard!: THREE.Mesh;
+  campFlag!: THREE.Mesh;
 
   trackOwnership() {
     const hs = this.units.filter(u => u.hero);
@@ -421,11 +436,12 @@ export class Game {
   // ---------- 场景 ----------
   boardGroup = new THREE.Group();
   buildScene() {
+    const theme = CHAPTER_VISUALS[this.level.chapter] || CHAPTER_VISUALS[0];
     // 背景宣纸
     const bgCv = document.createElement('canvas'); bgCv.width = 64; bgCv.height = 256;
     const bg = bgCv.getContext('2d')!;
     const gr = bg.createLinearGradient(0, 0, 0, 256);
-    gr.addColorStop(0, '#e6dcc4'); gr.addColorStop(0.45, '#f2ebdc'); gr.addColorStop(0.62, '#efe6d2'); gr.addColorStop(1, '#ddd0b4');
+    gr.addColorStop(0, theme.paperTop); gr.addColorStop(0.45, theme.paperMid); gr.addColorStop(0.62, theme.paperMid); gr.addColorStop(1, theme.paperBottom);
     bg.fillStyle = gr; bg.fillRect(0, 0, 64, 256);
     for (let i = 0; i < 600; i++) {
       bg.fillStyle = `rgba(120,100,70,${Math.random() * 0.05})`;
@@ -436,6 +452,18 @@ export class Game {
     bgMesh.position.z = -5;
     this.scene.add(bgMesh);
 
+    // 远景日晕与薄雾：让战场拥有纸面之外的空气层。
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(2.6, 48),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.sun), transparent: true, opacity: 0.12, depthWrite: false }));
+    sun.position.set(-3.3, 4.6, -4.85);
+    this.scene.add(sun);
+    for (const [x, y, sx, sy] of [[-2.8, 3.7, 4.2, 0.45], [2.4, 1.6, 3.6, 0.34], [-1.1, -2.6, 5.2, 0.3]] as const) {
+      const mist = new THREE.Mesh(new THREE.PlaneGeometry(sx, sy),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.mist), transparent: true, opacity: 0.12, depthWrite: false }));
+      mist.position.set(x, y, -4.75);
+      this.scene.add(mist);
+    }
+
     // 道路
     const pts: THREE.Vector2[] = [];
     for (const p of PATH) pts.push(new THREE.Vector2(p[0], p[1]));
@@ -443,17 +471,25 @@ export class Game {
     const mapW = GRID_C * T + 0.5, mapH = GRID_R * T + 0.5;
     const mapCy = (rowY(0) + rowY(GRID_R - 1)) / 2;
     const base = new THREE.Mesh(new THREE.PlaneGeometry(mapW, mapH),
-      new THREE.MeshBasicMaterial({ color: 0xdccfae, transparent: true, opacity: 0.55 }));
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.base), transparent: true, opacity: 0.55 }));
     base.position.set(0, mapCy, -4.6);
     this.scene.add(base);
 
+    const roadEdge = new THREE.Mesh(this.ribbon(pts, T * 1.08),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.roadEdge), transparent: true, opacity: 0.18 }));
+    roadEdge.position.z = -4.35;
+    this.scene.add(roadEdge);
     const road = this.ribbon(pts, T * 0.84);
-    const roadMesh = new THREE.Mesh(road, new THREE.MeshBasicMaterial({ color: 0xc4b18b }));
+    const roadMesh = new THREE.Mesh(road, new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.road) }));
     roadMesh.position.z = -4;
     this.scene.add(roadMesh);
-    const road2 = new THREE.Mesh(this.ribbon(pts, T * 0.99), new THREE.MeshBasicMaterial({ color: 0x8a7a5c, transparent: true, opacity: 0.4 }));
+    const road2 = new THREE.Mesh(this.ribbon(pts, T * 0.99), new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.roadEdge), transparent: true, opacity: 0.4 }));
     road2.position.z = -4.2;
     this.scene.add(road2);
+    const roadLight = new THREE.Mesh(this.ribbon(pts, T * 0.68),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.roadLight), transparent: true, opacity: 0.34 }));
+    roadLight.position.z = -3.82;
+    this.scene.add(roadLight);
 
     // 可布阵地块
     const cellTex = (() => {
@@ -494,12 +530,14 @@ export class Game {
       new THREE.MeshBasicMaterial({ color: 0xb45309, transparent: true, opacity: 0.35 }));
     guard.position.set(ADOU_POS.x, ADOU_POS.y, -1.2);
     this.scene.add(guard);
+    this.campGuard = guard;
 
     // 起点：曹军军旗
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95),
       new THREE.MeshBasicMaterial({ map: pieceTexture('曹', '#7f1d1d', 1, false, true), transparent: true }));
     flag.position.set(PATH[0][0], PATH[0][1] + 0.35, -2);
     this.scene.add(flag);
+    this.campFlag = flag;
   }
   adouMesh!: THREE.Mesh;
 
@@ -1084,6 +1122,7 @@ export class Game {
   }
   shake(mag: number, t: number) {
     if (!this.opts.shake) return;
+    this.shakePhase += 0.75;
     this.shakeMag = Math.max(this.shakeMag, mag); this.shakeT = Math.max(this.shakeT, t);
   }
 
@@ -1764,13 +1803,21 @@ export class Game {
     if (this.shakeT > 0) {
       this.shakeT -= dt;
       const m = this.shakeMag * Math.max(0, this.shakeT * 4);
-      this.camera.position.x = (Math.random() - 0.5) * m * 2;
-      this.camera.position.y = (Math.random() - 0.5) * m * 2;
+      const p = this.time * 52 + this.shakePhase;
+      // 连续噪声替代逐帧随机，镜头冲击更像摄影机惯性而不是抖屏。
+      this.camera.position.x = (Math.sin(p) * 0.78 + Math.sin(p * 0.43) * 0.22) * m;
+      this.camera.position.y = (Math.cos(p * 1.13) * 0.72 + Math.sin(p * 0.31) * 0.28) * m;
       if (this.shakeT <= 0) { this.shakeMag = 0; this.camera.position.set(0, 0, 10); }
     }
     this.adouMesh.position.y = ADOU_POS.y + Math.sin(this.time * 1.6) * 0.05;
     this.adouMesh.rotation.z = Math.sin(this.time * 1.6) * 0.06;
     this.adouMesh.scale.setScalar(1 + Math.sin(this.time * 3) * 0.02);
+    if (this.campGuard) {
+      const pulse = 1 + Math.sin(this.time * 2.2) * 0.07;
+      this.campGuard.scale.setScalar(pulse);
+      (this.campGuard.material as THREE.MeshBasicMaterial).opacity = 0.26 + Math.sin(this.time * 2.2) * 0.07;
+    }
+    if (this.campFlag) this.campFlag.rotation.z = Math.sin(this.time * 1.4) * 0.035;
     this.renderer.render(this.scene, this.camera);
   }
 
